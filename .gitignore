@@ -1,5 +1,6 @@
 # Copied as of https://github.com/github/gitignore/commit/c6e6d99b65bcdfc8f248f9545fc9ae43d141d8bd
 .DS_Store
+.idea
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

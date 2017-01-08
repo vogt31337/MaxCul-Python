@@ -18,7 +18,7 @@
 # python imports
 from collections import defaultdict
 from datetime import datetime
-import Queue
+import queue
 import threading
 import time
 
@@ -32,7 +32,10 @@ from moritzprotocol.messages import (
     MoritzMessage, MoritzError,
     PairPingMessage, PairPongMessage,
     TimeInformationMessage,
-    SetTemperatureMessage, ThermostatStateMessage, AckMessage
+    SetTemperatureMessage,
+    ThermostatStateMessage,
+    AckMessage,
+    ShutterContactStateMessage
 )
 from moritzprotocol.signals import thermostatstate_received, device_pair_accepted, device_pair_request
 
@@ -48,11 +51,12 @@ SHUTTERCONTACT_ID = 0x123458
 class CULComThread(threading.Thread):
     """Low-level serial communication thread base"""
 
-    def __init__(self, send_queue, read_queue, device_path):
+    def __init__(self, send_queue, read_queue, device_path, baudrate):
         super(CULComThread, self).__init__()
         self.send_queue = send_queue
         self.read_queue = read_queue
         self.device_path = device_path
+        self.baudrate = baudrate
         self.pending_line = []
         self.stop_requested = threading.Event()
         self.cul_version = ""
@@ -114,7 +118,7 @@ class CULComThread(threading.Thread):
     def _init_cul(self):
         """Ensure CUL reports reception strength and does not do FS messages"""
 
-        self.com_port = Serial(self.device_path)
+        self.com_port = Serial(self.device_path, self.baudrate)
         self._read_result()
         # get CUL FW version
         def _get_cul_ver():
@@ -131,7 +135,7 @@ class CULComThread(threading.Thread):
         if not self.cul_version:
             com_logger.info("No version from CUL reported. Closing and re-opening port")
             self.com_port.close()
-            self.com_port = Serial(self.device_path)
+            self.com_port = Serial(self.device_path, self.baudrate)
             for i in range(10):
                 _get_cul_ver()
                 if self.cul_version:
@@ -164,14 +168,14 @@ class CULComThread(threading.Thread):
 
         if command.startswith("Zs"):
             self._pending_budget = 0
-        self.com_port.write(command + "\r\n")
+        self.com_port.write((command + "\r\n").encode())
         com_logger.debug("sent: %s" % command)
 
     def _read_result(self):
         """Reads data from port, if it's a Moritz message, forward directly, otherwise return to caller"""
 
         while self.com_port.inWaiting():
-            self.pending_line.append(self.com_port.read(1))
+            self.pending_line.append(self.com_port.read(1).decode("utf-8"))
             if self.pending_line[-1] == "\n":
                 # remove newlines at the end
                 completed_line = "".join(self.pending_line[:-2])
@@ -186,14 +190,16 @@ class CULComThread(threading.Thread):
 class CULMessageThread(threading.Thread):
     """High level message processing"""
 
-    def __init__(self, command_queue, device_path):
+    def __init__(self, command_queue, device_path, baudrate):
         super(CULMessageThread, self).__init__()
         self.command_queue = command_queue
         self.thermostat_states = defaultdict(dict)
         self.thermostat_states_lock = threading.Lock()
-        self.com_send_queue = Queue.Queue()
-        self.com_receive_queue = Queue.Queue()
-        self.com_thread = CULComThread(self.com_send_queue, self.com_receive_queue, device_path)
+        self.shuttercontact_states = defaultdict(dict)
+        self.shuttercontact_states_lock = threading.Lock()
+        self.com_send_queue = queue.Queue()
+        self.com_receive_queue = queue.Queue()
+        self.com_thread = CULComThread(self.com_send_queue, self.com_receive_queue, device_path, baudrate)
         self.stop_requested = threading.Event()
         self.pair_as_cube = True
         self.pair_as_wallthermostat = False
@@ -208,7 +214,7 @@ class CULMessageThread(threading.Thread):
                 message = MoritzMessage.decode_message(received_msg[:-2])
                 signal_strength = int(received_msg[-2:], base=16)
                 self.respond_to_message(message, signal_strength)
-            except Queue.Empty:
+            except queue.Empty:
                 pass
             except MoritzError as e:
                 message_logger.error("Message parsing failed, ignoring message '%s'. Reason: %s" % (received_msg, str(e)))
@@ -218,7 +224,7 @@ class CULMessageThread(threading.Thread):
                 raw_message = msg.encode_message(payload)
                 message_logger.debug("send type %s" % msg)
                 self.com_send_queue.put(raw_message)
-            except Queue.Empty:
+            except queue.Empty:
                 pass
 
             time.sleep(0.3)
@@ -301,6 +307,22 @@ class CULMessageThread(threading.Thread):
                     self.thermostat_states[msg.sender_id]['last_updated'] = datetime.now()
                     self.thermostat_states[msg.sender_id]['signal_strenth'] = signal_strenth
                 return
+
+        elif isinstance(msg, ShutterContactStateMessage):
+            ackMsg = AckMessage()
+            ackMsg.counter = 0xB9
+            ackMsg.sender_id = CUBE_ID
+            ackMsg.receiver_id = int(msg.sender_id)
+            ackMsg.group_id = 0
+            payload = "01"
+            self.command_queue.put((msg, payload))
+
+            with self.shuttercontact_states_lock:
+                message_logger.info("shuttercontact updated for 0x%X" % msg.sender_id)
+                self.shuttercontact_states[msg.sender_id].update(msg.decoded_payload)
+                self.shuttercontact_states[msg.sender_id]['last_updated'] = datetime.now()
+                self.shuttercontact_states[msg.sender_id]['signal_strenth'] = signal_strenth
+            return
 
         message_logger.warning("Unhandled Message of type %s, contains %s" % (msg.__class__.__name__, str(msg)))
 

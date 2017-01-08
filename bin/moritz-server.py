@@ -13,13 +13,13 @@
 
 # python imports
 from datetime import datetime
-import Queue
+import queue
 import json
 from json import encoder
 
 # environment imports
 from flask import Flask, request, url_for
-from flask.ext.sqlalchemy import SQLAlchemy
+from flask_sqlalchemy import SQLAlchemy
 
 # custom imports
 from moritzprotocol.communication import CULMessageThread, CUBE_ID
@@ -43,23 +43,25 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///moritz-server.db'
 db = SQLAlchemy(app)
 
-command_queue = Queue.Queue()
+command_queue = queue.Queue()
 
 #
 # Models
 #
-class Thermostat(db.Model):
+class Devices(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sender_id = db.Column(db.Integer)
     serial = db.Column(db.String(32))
     firmware_version = db.Column(db.String(32), nullable=True)
     name = db.Column(db.String(64))
     paired = db.Column(db.Boolean, default=False)
+    device_type = db.Column(db.String(32))
 
-    def __init__(self, sender_id, serial):
+    def __init__(self, sender_id, serial, device_type):
         self.sender_id = sender_id
         self.serial = serial
         self.name = serial
+        self.device_type = device_type
 
     def __repr__(self):
         return "<%s sender_id=%s name=%s>" % (self.__class__.__name__, self.sender_id, self.name)
@@ -67,8 +69,8 @@ class Thermostat(db.Model):
 
 class ThermostatState(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    thermostat_id = db.Column(db.Integer, db.ForeignKey('thermostat.id'))
-    thermostat = db.relationship('Thermostat', backref=db.backref('states', lazy='dynamic'))
+    thermostat_id = db.Column(db.Integer, db.ForeignKey('devices.id'))
+    thermostat = db.relationship('Devices', backref=db.backref('states', lazy='dynamic'))
     last_updated = db.Column('last_updated', db.DateTime, default=datetime.now, onupdate=datetime.now)
     rferror = db.Column(db.Boolean, nullable=True)
     signal_strength = db.Column(db.Integer, nullable=True)
@@ -86,21 +88,21 @@ class ThermostatState(db.Model):
 # Signal responders
 #
 @device_pair_request.connect
-def create_new_thermostat(sender, **kw):
+def create_new_device(sender, **kw):
     msg = kw['msg']
-    entry = Thermostat.query.filter_by(sender_id=msg.sender_id).first()
+    entry = Devices.query.filter_by(sender_id=msg.sender_id).first()
     if entry is None:
-        entry = Thermostat(msg.sender_id, msg.decoded_payload['device_serial'])
+        entry = Devices(msg.sender_id, msg.decoded_payload['device_serial'], msg.decoded_payload['device_type'])
         entry.firmware_version = msg.decoded_payload['firmware_version']
         db.session.add(entry)
         db.session.commit()
 
 @device_pair_accepted.connect
-def activate_thermostat(sender, **kw):
+def activate_device(sender, **kw):
     msg = kw['resp_msg']
-    entry = Thermostat.query.filter_by(sender_id=msg.receiver_id).first()
+    entry = Devices.query.filter_by(sender_id=msg.receiver_id).first()
     if entry is None:
-        entry = Thermostat(msg.receiver_id, "Unknown")
+        entry = Devices(msg.receiver_id, "Unknown")
     entry.paired = True
     db.session.add(entry)
     db.session.commit()
@@ -108,7 +110,7 @@ def activate_thermostat(sender, **kw):
 @thermostatstate_received.connect
 def store_thermostatstate(sender, **kw):
     msg = kw['msg']
-    thermostat = Thermostat.query.filter_by(sender_id=msg.sender_id).first()
+    thermostat = Devices.query.filter_by(sender_id=msg.sender_id, device_type="HeatingThermostat").first()
     if thermostat is None:
         return
     thermostat_state = ThermostatState()
@@ -128,7 +130,8 @@ def store_thermostatstate(sender, **kw):
 @app.route("/")
 def index():
     return "<a href='" + url_for("get_devices") + "'>Tracked devices</a><br>" + \
-           "<a href='" + url_for("current_thermostat_states") + "'>Current states</a><br>" + \
+           "<a href='" + url_for("current_thermostat_states") + "'>Current thermostat states</a><br>" + \
+           "<a href='" + url_for("current_shuttercontact_states") + "'>Current shuttercontact states</a><br>" + \
            "<a href='" + url_for("set_temp") + "'>Set one temp</a><br>" + \
            "<a href='" + url_for("set_temp_all") + "'>Set temp on all sensors</a>"
 
@@ -137,16 +140,22 @@ def current_thermostat_states():
     with message_thread.thermostat_states_lock:
         return json.dumps(message_thread.thermostat_states, indent=4, sort_keys=True, cls=JSONWithDateEncoder)
 
+@app.route("/current_shuttercontact_states")
+def current_shuttercontact_states():
+    with message_thread.shuttercontact_states_lock:
+        return json.dumps(message_thread.shuttercontact_states, indent=4, sort_keys=True, cls=JSONWithDateEncoder)
+
 @app.route("/get_devices")
 def get_devices():
     devices = []
-    for thermostat in Thermostat.query.all():
+    for device in Devices.query.all():
         devices.append({
-            'sender_id': thermostat.sender_id,
-            'serial': thermostat.serial,
-            'firmware_version': thermostat.firmware_version,
-            'name': thermostat.name,
-            'paired': thermostat.paired,
+            'sender_id': device.sender_id,
+            'serial': device.serial,
+            'firmware_version': device.firmware_version,
+            'name': device.name,
+            'paired': device.paired,
+            'device_type': device.device_type,
         })
     return json.dumps(devices)
 
@@ -154,7 +163,7 @@ def get_devices():
 def set_temp():
     if not request.form:
         content = """<html><form action="" method="POST"><select name="thermostat">"""
-        for thermostat in Thermostat.query.filter_by(paired=True):
+        for thermostat in Devices.query.filter_by(paired=True, device_type="HeatingThermostat"):
             content += """<option value="%s">%s</option>""" % (thermostat.sender_id, thermostat.name)
         content += """</select><select name="mode"><option>auto</option><option selected>manual</option><option>boost</option></select>"""
         content += """<input type=text name=temperature><input type=submit value="set"></form></html>"""
@@ -177,7 +186,7 @@ def set_temp_all():
         content = """<html><form action="" method="POST"><select name="mode"><option>auto</option><option selected>manual</option><option>boost</option></select>"""
         content += """<input type=text name=temperature><input type=submit value="set"></form></html>"""
         return content
-    for thermostat in Thermostat.query.filter_by(paired=True):
+    for thermostat in Devices.query.filter_by(paired=True, device_type="HeatingThermostat"):
         msg = SetTemperatureMessage()
         msg.counter = 0xB9
         msg.sender_id = CUBE_ID
@@ -195,7 +204,7 @@ def set_temp_all():
 #
 def main(args):
     global message_thread
-    message_thread = CULMessageThread(command_queue, args.cul_path)
+    message_thread = CULMessageThread(command_queue, args.cul_path, args.cul_baud)
     message_thread.start()
 
     if args.flask_debug:
@@ -211,6 +220,7 @@ if __name__ == '__main__':
     parser.add_argument("--flask-debug", action="store_true", help="Enables Flask debug and reload. May cause weird behaviour.")
     parser.add_argument("--detach", action="store_true", help="Detach from terminal")
     parser.add_argument("--cul-path", default="/dev/ttyACM0", help="Path to usbmodem path of CUL, defaults to /dev/ttyACM0")
+    parser.add_argument("--cul-baud", default="38400", help="Baudrate of the cul serial connection.")
     args = parser.parse_args()
 
     db.create_all()
