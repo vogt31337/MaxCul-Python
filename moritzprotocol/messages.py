@@ -243,19 +243,14 @@ class ShutterContactStateMessage(MoritzMessage):
 
     @staticmethod
     def decode_status(payload):
-        status_bits = int(payload, 16)
-        state = status_bits & 0x3
-        dstsetting = status_bits & 0x04
-        langateway = status_bits & 0x08
-        status_bits = status_bits >> 9
-        is_locked = status_bits & 0x1
-        rferror = status_bits & 0x2
-        battery_low = status_bits & 0x4
+        status_bits = bin(int(payload, 16))[2:].zfill(8)
+        state = int(status_bits[6:],2)
+        unkbits = int(status_bits[2:6],2)
+        rferror = int(status_bits[1],2)
+        battery_low = int(status_bits[0],2)
         result = {
             "state": SHUTTER_STATES[state],
-            "dstsetting": bool(dstsetting),
-            "langateway": bool(langateway),
-            "is_locked": bool(is_locked),
+            "unkbits": unkbits,
             "rferror": bool(rferror),
             "battery_low": bool(battery_low)
         }
@@ -264,16 +259,6 @@ class ShutterContactStateMessage(MoritzMessage):
     @property
     def decoded_payload(self):
         result = ShutterContactStateMessage.decode_status(self.payload)
-        if len(self.payload) > 6:
-            pending_payload = bytearray.fromhex(self.payload[6:])
-            if len(pending_payload) == 3:
-                # TODO handle date string
-                pass
-            elif len(pending_payload) == 2 and result['mode'] != 'temporary':
-                result["measured_temperature"] = (((pending_payload[0] & 0x1) << 8) + pending_payload[1]) / 10.0
-            else:
-                # unknown....
-                pass
         return result
 
 class SetTemperatureMessage(MoritzMessage):
