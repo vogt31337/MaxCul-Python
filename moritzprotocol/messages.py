@@ -46,6 +46,27 @@ SHUTTER_STATES = {
     2: "open",
 }
 
+DECALC_DAYS = {
+    "Sat" : 0,
+    "Sun" : 1,
+    "Mon" : 2,
+    "Tue" : 3,
+    "Wed" : 4,
+    "Thu" : 5,
+    "Fri" : 6
+}
+
+BOOST_DURATION = {
+    0 : 0,
+    5 : 1,
+    10: 2,
+    15: 3,
+    20: 4,
+    25: 5,
+    30: 6,
+    60: 7
+}
+
 
 class MoritzMessage(object):
     """Represents (de)coded message as seen on Moritz Wire"""
@@ -178,6 +199,9 @@ class AckMessage(MoritzMessage):
             result.update(ThermostatStateMessage.decode_status(self.payload[2:]))
         return result
 
+    def encode_payload(self, payload=None):
+        return payload
+
 
 class TimeInformationMessage(MoritzMessage):
     """Current time is either requested or encoded. Request simply is empty payload"""
@@ -215,27 +239,144 @@ class ConfigWeekProfileMessage(MoritzMessage):
 
 
 class ConfigTemperaturesMessage(MoritzMessage):
-    pass
+    """Sets temperatur config"""
+
+    @property
+    def decoded_payload(self):
+        pass
+
+    def encode_flag(self):
+        return 0x4 if self.group_id else 0x0
+
+    def encode_payload(self, payload):
+        if "comfort_Temperature" not in payload:
+            raise MissingPayloadParameterError("Missing comfort_Temperature in payload")
+        if "eco_Temperature" not in payload:
+            raise MissingPayloadParameterError("Missing eco_Temperature in payload")
+        if "max_Temperature" not in payload:
+            raise MissingPayloadParameterError("Missing max_Temperature in payload")
+        if "min_Temperature" not in payload:
+            raise MissingPayloadParameterError("Missing min_Temperature in payload")
+        if "measurement_Offset" not in payload:
+            raise MissingPayloadParameterError("Missing measurement_Offset in payload")
+        if "window_Open_Temperatur" not in payload:
+            raise MissingPayloadParameterError("Missing window_Open_Temperatur in payload")
+        if "window_Open_Duration" not in payload:
+            raise MissingPayloadParameterError("Missing window_Open_Duration in payload")
+
+        comfort_Temperature = "%0.2X" % int(payload['comfort_Temperature']*2)
+        eco_Temperature = "%0.2X" % int(payload['eco_Temperature']*2)
+        max_Temperature = "%0.2X" % int(payload['max_Temperature']*2)
+        min_Temperature = "%0.2X" % int(payload['min_Temperature']*2)
+        measurement_Offset = "%0.2X" % int((payload['measurement_Offset'] + 3.5)*2)
+        window_Open_Temperatur = "%0.2X" % int(payload['window_Open_Temperatur']*2)
+        window_Open_Duration = "%0.2X" % int(payload['window_Open_Duration']/5)
+
+        content = comfort_Temperature + eco_Temperature + max_Temperature + min_Temperature + measurement_Offset + window_Open_Temperatur +window_Open_Duration
+        return content
+
 
 
 class ConfigValveMessage(MoritzMessage):
-    pass
+    """Sets valve config"""
+
+    @property
+    def decoded_payload(self):
+        pass
+
+    def encode_flag(self):
+        return 0x4 if self.group_id else 0x0
+
+    def encode_payload(self, payload):
+        if "boost_duration" not in payload:
+            raise MissingPayloadParameterError("Missing boost duration in payload")
+        if "boost_valve_position" not in payload:
+            raise MissingPayloadParameterError("Missing boost valve position in payload")
+        if "decalc_day" not in payload:
+            raise MissingPayloadParameterError("Missing decalc day in payload")
+        if "decalc_hour" not in payload:
+            raise MissingPayloadParameterError("Missing decalc hour in payload")
+        if "max_valve_position" not in payload:
+            raise MissingPayloadParameterError("Missing max valve position in payload")
+        if "valve_offset" not in payload:
+            raise MissingPayloadParameterError("Missing valve offset in payload")
+
+        boost = "%0.2X" % ((BOOST_DURATION[payload["boost_duration"]] << 5) | int(payload["boost_valve_position"]/5))
+        decalc = "%0.2X" % ((DECALC_DAYS[payload["decalc_day"]] << 5) | payload["decalc_hour"])
+        max_valve_position = "%0.2X" % int(payload["max_valve_position"]*255/100)
+        valve_offset = "%0.2X" % int(payload["valve_offset"]*255/100)
+        content = boost + decalc + max_valve_position + valve_offset
+        return content
 
 
 class AddLinkPartnerMessage(MoritzMessage):
-    pass
 
+    @property
+    def decoded_payload(self):
+        pass
+
+    def encode_flag(self):
+        return 0x4 if self.group_id else 0x0
+
+    def encode_payload(self, payload):
+        if "assocDevice" not in payload:
+            raise MissingPayloadParameterError("Missing assocDevice in payload")
+        if "assocDeviceType" not in payload:
+            raise MissingPayloadParameterError("Missing assocDeviceType in payload")
+
+        assocDevice = "%0.6X" % int(payload["assocDevice"])
+        assocDeviceType = "%0.2X" % list(DEVICE_TYPES.keys())[list(DEVICE_TYPES.values()).index(payload["assocDeviceType"])]
+        return assocDevice + assocDeviceType
 
 class RemoveLinkPartnerMessage(MoritzMessage):
-    pass
+    @property
+    def decoded_payload(self):
+        pass
+
+    def encode_flag(self):
+        return 0x4 if self.group_id else 0x0
+
+    def encode_payload(self, payload):
+        if "assocDevice" not in payload:
+            raise MissingPayloadParameterError("Missing assocDevice in payload")
+        if "assocDeviceType" not in payload:
+            raise MissingPayloadParameterError("Missing assocDeviceType in payload")
+
+        assocDevice = payload["assocDevice"]
+        assocDeviceType = "%0.2X" % DEVICE_TYPES[payload["assocDeviceType"]]
+        return assocDevice + assocDeviceType
 
 
 class SetGroupIdMessage(MoritzMessage):
-    pass
+
+    @property
+    def decoded_payload(self):
+        pass
+
+    def encode_flag(self):
+        return 0x4 if self.group_id else 0x0
+
+    def encode_payload(self, payload):
+        if "group_id" not in payload:
+            raise MissingPayloadParameterError("Missing group id in payload")
+
+        groupId = "%0.2X" % payload["group_id"]
+        return groupId
+
 
 
 class RemoveGroupIdMessage(MoritzMessage):
-    pass
+    @property
+    def decoded_payload(self):
+        pass
+
+    def encode_flag(self):
+        return 0x4 if self.group_id else 0x0
+
+    def encode_payload(self, payload):
+        overrideGroupId = "00"
+        return overrideGroupId
+
 
 
 class ShutterContactStateMessage(MoritzMessage):
@@ -293,6 +434,10 @@ class SetTemperatureMessage(MoritzMessage):
         modes = dict((v, k) for (k, v) in MODE_IDS.items())
         mode = modes[payload['mode']]
 
+        # TODO: you can add a until time for chort changes
+        # from fhem
+        # $until = sprintf("%06x",MAX_DateTime2Internal($args[2]." ".$args[3]));
+        # $payload .= $until if(defined($until));
         content = "%X".upper() % ((mode << 6) | int_temperature)
         return content.zfill(2)
 

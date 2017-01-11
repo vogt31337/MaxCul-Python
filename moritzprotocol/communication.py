@@ -35,7 +35,10 @@ from moritzprotocol.messages import (
     SetTemperatureMessage,
     ThermostatStateMessage,
     AckMessage,
-    ShutterContactStateMessage
+    ShutterContactStateMessage,
+    ConfigValveMessage,
+    SetGroupIdMessage,
+    AddLinkPartnerMessage
 )
 from moritzprotocol.signals import thermostatstate_received, device_pair_accepted, device_pair_request
 
@@ -220,12 +223,16 @@ class CULMessageThread(threading.Thread):
                 message_logger.error("Message parsing failed, ignoring message '%s'. Reason: %s" % (received_msg, str(e)))
 
             try:
-                msg, payload = self.command_queue.get(True, 0.05)
+                tempMsg = self.command_queue.get(True, 0.05)
+                msg, payload = tempMsg
                 raw_message = msg.encode_message(payload)
                 message_logger.debug("send type %s" % msg)
+                message_logger.debug("send raw line %s" % raw_message)
                 self.com_send_queue.put(raw_message)
             except queue.Empty:
                 pass
+            except MoritzError as e:
+                message_logger.error("Message sending failed, ignoring message '%s'. Reason: %s" % (msg, str(e)))
 
             time.sleep(0.3)
 
@@ -309,16 +316,21 @@ class CULMessageThread(threading.Thread):
                 return
 
         elif isinstance(msg, ShutterContactStateMessage):
-            ackMsg = AckMessage()
-            ackMsg.counter = 0xB9
-            ackMsg.sender_id = CUBE_ID
-            ackMsg.receiver_id = int(msg.sender_id)
-            ackMsg.group_id = 0
-            payload = "01"
-            self.command_queue.put((msg, payload))
+
+            #send a assoc message to provocate ack from shutter
+            ansmsg = AddLinkPartnerMessage()
+            ansmsg.counter = msg.counter+1
+            ansmsg.sender_id = CUBE_ID
+            ansmsg.receiver_id = msg.sender_id
+            ansmsg.group_id = msg.group_id
+            ansPayload = {
+                'assocDevice': 1237277,
+                'assocDeviceType': 'HeatingThermostat'
+            }
+            self.command_queue.put((ansmsg, ansPayload))
 
             with self.shuttercontact_states_lock:
-                message_logger.info("shuttercontact updated for 0x%X" % msg.sender_id)
+                message_logger.info("shuttercontact updated %s" % msg)
                 self.shuttercontact_states[msg.sender_id].update(msg.decoded_payload)
                 self.shuttercontact_states[msg.sender_id]['last_updated'] = datetime.now()
                 self.shuttercontact_states[msg.sender_id]['signal_strenth'] = signal_strenth

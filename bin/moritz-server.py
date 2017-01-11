@@ -23,7 +23,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 # custom imports
 from moritzprotocol.communication import CULMessageThread, CUBE_ID
-from moritzprotocol.messages import SetTemperatureMessage
+from moritzprotocol.messages import SetTemperatureMessage, ConfigValveMessage, SetGroupIdMessage, ConfigTemperaturesMessage, AddLinkPartnerMessage
 from moritzprotocol.signals import device_pair_accepted, device_pair_request, thermostatstate_received
 
 # local constantsfrom datetime import datetime
@@ -133,6 +133,10 @@ def index():
            "<a href='" + url_for("current_thermostat_states") + "'>Current thermostat states</a><br>" + \
            "<a href='" + url_for("current_shuttercontact_states") + "'>Current shuttercontact states</a><br>" + \
            "<a href='" + url_for("set_temp") + "'>Set one temp</a><br>" + \
+           "<a href='" + url_for("set_boost_config") + "'>Set boost</a><br>" + \
+           "<a href='" + url_for("set_groupId") + "'>Set group id</a><br>" + \
+           "<a href='" + url_for("set_assoc") + "'>Set assoc</a><br>" + \
+           "<a href='" + url_for("set_config_temperature") + "'>Set config temperature</a><br>" + \
            "<a href='" + url_for("set_temp_all") + "'>Set temp on all sensors</a>"
 
 @app.route("/current_thermostat_states")
@@ -179,6 +183,105 @@ def set_temp():
     }
     command_queue.put((msg, payload))
     return """<html>Done. <a href="/">back</a>"""
+
+@app.route("/set_boost_config", methods=["GET", "POST"])
+def set_boost_config():
+    if not request.form:
+        content = """<html><form action="" method="POST"><select name="thermostat">"""
+        for thermostat in Devices.query.filter_by(paired=True, device_type="HeatingThermostat"):
+            content += """<option value="%s">%s</option>""" % (thermostat.sender_id, thermostat.name)
+        content += """</select><select name="mode"><option>auto</option><option selected>manual</option><option>boost</option></select>"""
+        content += """<input type=text name=temperature><input type=submit value="set"></form></html>"""
+        return content
+    msg = ConfigValveMessage()
+    msg.counter = 0xB9
+    msg.sender_id = CUBE_ID
+    msg.receiver_id = int(request.form['thermostat'])
+    msg.group_id = 0
+    payload = {
+        'boost_duration': 5,
+        'boost_valve_position': 100,
+        'boost': '54',
+        'decalc_day': "Sat",
+        'decalc_hour': 12,
+        'decalc': '8c',
+        'max_valve_position': 100,
+        'valve_offset': 0
+    }
+    command_queue.put((msg, payload))
+    return """<html>Done. <a href="/">back</a>"""
+
+@app.route("/set_config_temperature", methods=["GET", "POST"])
+def set_config_temperature():
+    if not request.form:
+        content = """<html><form action="" method="POST"><select name="thermostat">"""
+        for thermostat in Devices.query.filter_by(paired=True, device_type="HeatingThermostat"):
+            content += """<option value="%s">%s</option>""" % (thermostat.sender_id, thermostat.name)
+        content += """<input type=text name=temperature><input type=submit value="set"></form></html>"""
+        return content
+    msg = ConfigTemperaturesMessage()
+    msg.counter = 0xB9
+    msg.sender_id = CUBE_ID
+    msg.receiver_id = int(request.form['thermostat'])
+    msg.group_id = 0
+    payload = {
+        'comfort_Temperature': 20,
+        'eco_Temperature': 16,
+        'max_Temperature': 22,
+        'min_Temperature': 10,
+        'measurement_Offset': 0,
+        'window_Open_Temperatur': 12,
+        'window_Open_Duration': 15,
+    }
+    command_queue.put((msg, payload))
+    return """<html>Done. <a href="/">back</a>"""
+
+
+@app.route("/set_groupId", methods=["GET", "POST"])
+def set_groupId():
+    if not request.form:
+        content = """<html><form action="" method="POST"><select name="device">"""
+        for device in Devices.query.filter_by(paired=True):
+            content += """<option value="%s">%s</option>""" % (device.sender_id, device.name)
+        content += """<input type=text name=groupId><input type=submit value="set"></form></html>"""
+        return content
+    msg = SetGroupIdMessage()
+    msg.counter = 0xB9
+    msg.sender_id = CUBE_ID
+    msg.receiver_id = int(request.form['device'])
+    msg.group_id = 0
+    payload = {
+        'group_id':  int(request.form["groupId"])
+    }
+    command_queue.put((msg, payload))
+    return """<html>Done. <a href="/">back</a>"""
+
+@app.route("/set_assoc", methods=["GET", "POST"])
+def set_assoc():
+    if not request.form:
+        content = """<html><form action="" method="POST"><select name="device">"""
+        for device in Devices.query.filter_by(paired=True):
+            content += """<option value="%s">%s</option>""" % (device.sender_id, device.name)
+
+        content += """</select><select name="assocDevice">"""
+
+        for device in Devices.query.filter_by(paired=True):
+            content += """<option value="%s">%s</option>""" % (device.sender_id, device.name)
+        content += """<input type=submit value="set"></form></html>"""
+        return content
+    msg = AddLinkPartnerMessage()
+    msg.counter = 0xB9
+    msg.sender_id = CUBE_ID
+    msg.receiver_id = int(request.form['device'])
+    msg.group_id = 0
+    payload = {
+        'assocDevice':  request.form["assocDevice"],
+        'assocDeviceType': 'ShutterContact'
+    }
+    command_queue.put((msg, payload))
+    return """<html>Done. <a href="/">back</a>"""
+
+
 
 @app.route("/set_temp_all", methods=["GET", "POST"])
 def set_temp_all():
