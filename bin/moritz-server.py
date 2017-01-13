@@ -23,7 +23,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 # custom imports
 from moritzprotocol.communication import CULMessageThread, CUBE_ID
-from moritzprotocol.messages import SetTemperatureMessage, ConfigValveMessage, SetGroupIdMessage, ConfigTemperaturesMessage, AddLinkPartnerMessage
+from moritzprotocol.messages import SetTemperatureMessage, ConfigValveMessage, SetGroupIdMessage, ConfigTemperaturesMessage, AddLinkPartnerMessage, TimeInformationMessage
 from moritzprotocol.signals import device_pair_accepted, device_pair_request, thermostatstate_received
 
 # local constantsfrom datetime import datetime
@@ -132,7 +132,9 @@ def index():
     return "<a href='" + url_for("get_devices") + "'>Tracked devices</a><br>" + \
            "<a href='" + url_for("current_thermostat_states") + "'>Current thermostat states</a><br>" + \
            "<a href='" + url_for("current_shuttercontact_states") + "'>Current shuttercontact states</a><br>" + \
+           "<a href='" + url_for("current_wallthermostat_states") + "'>Current wallthermostat states</a><br>" + \
            "<a href='" + url_for("set_temp") + "'>Set one temp</a><br>" + \
+           "<a href='" + url_for("set_time") + "'>Set time</a><br>" + \
            "<a href='" + url_for("set_boost_config") + "'>Set boost</a><br>" + \
            "<a href='" + url_for("set_groupId") + "'>Set group id</a><br>" + \
            "<a href='" + url_for("set_assoc") + "'>Set assoc</a><br>" + \
@@ -148,6 +150,12 @@ def current_thermostat_states():
 def current_shuttercontact_states():
     with message_thread.shuttercontact_states_lock:
         return json.dumps(message_thread.shuttercontact_states, indent=4, sort_keys=True, cls=JSONWithDateEncoder)
+
+@app.route("/current_wallthermostat_states")
+def current_wallthermostat_states():
+    with message_thread.wallthermostat_states_lock:
+        return json.dumps(message_thread.wallthermostat_states, indent=4, sort_keys=True, cls=JSONWithDateEncoder)
+
 
 @app.route("/get_devices")
 def get_devices():
@@ -167,8 +175,8 @@ def get_devices():
 def set_temp():
     if not request.form:
         content = """<html><form action="" method="POST"><select name="thermostat">"""
-        for thermostat in Devices.query.filter_by(paired=True, device_type="HeatingThermostat"):
-            content += """<option value="%s">%s</option>""" % (thermostat.sender_id, thermostat.name)
+        for thermostat in Devices.query.filter_by(paired=True):
+            content += """<option value="%s">%s %s</option>""" % (thermostat.sender_id, thermostat.name, thermostat.device_type)
         content += """</select><select name="mode"><option>auto</option><option selected>manual</option><option>boost</option></select>"""
         content += """<input type=text name=temperature><input type=submit value="set"></form></html>"""
         return content
@@ -181,6 +189,23 @@ def set_temp():
         'desired_temperature': float(request.form["temperature"]),
         'mode': request.form["mode"],
     }
+    command_queue.put((msg, payload))
+    return """<html>Done. <a href="/">back</a>"""
+
+@app.route("/set_time", methods=["GET", "POST"])
+def set_time():
+    if not request.form:
+        content = """<html><form action="" method="POST"><select name="device">"""
+        for device in Devices.query.filter_by(paired=True):
+            content += """<option value="%s">%s</option>""" % (device.sender_id, device.name)
+        content += """<input type=submit value="set"></form></html>"""
+        return content
+    msg = TimeInformationMessage()
+    msg.counter = 2
+    msg.sender_id = CUBE_ID
+    msg.receiver_id = int(request.form['device'])
+    msg.group_id = 0
+    payload = datetime.now()
     command_queue.put((msg, payload))
     return """<html>Done. <a href="/">back</a>"""
 

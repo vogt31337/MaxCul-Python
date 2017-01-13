@@ -329,6 +329,7 @@ class AddLinkPartnerMessage(MoritzMessage):
         return assocDevice + assocDeviceType
 
 class RemoveLinkPartnerMessage(MoritzMessage):
+
     @property
     def decoded_payload(self):
         pass
@@ -366,6 +367,7 @@ class SetGroupIdMessage(MoritzMessage):
 
 
 class RemoveGroupIdMessage(MoritzMessage):
+
     @property
     def decoded_payload(self):
         pass
@@ -443,7 +445,21 @@ class SetTemperatureMessage(MoritzMessage):
 
 
 class WallThermostatControlMessage(MoritzMessage):
-    pass
+
+    @staticmethod
+    def decode_status(payload):
+        rawTempratures = bin(int(payload, 16))[2:].zfill(16)
+
+        result = {
+            "desired_temprature": int(rawTempratures[1:8], 2)/2,
+            "temprature": ((int(rawTempratures[0], 2) << 8) + int(rawTempratures[8:], 2))/10
+        }
+        return result
+
+    @property
+    def decoded_payload(self):
+        result = WallThermostatControlMessage.decode_status(self.payload)
+        return result
 
 
 class SetComfortTemperatureMessage(MoritzMessage):
@@ -501,7 +517,79 @@ class ThermostatStateMessage(MoritzMessage):
 
 
 class WallThermostatStateMessage(MoritzMessage):
-    pass
+    """Non-reculary sent by Thermostats to report when valve was moved or command received."""
+
+
+    @staticmethod
+    def decode_status(payload):
+        status_bits = bin(int(payload[:2], 16))[2:].zfill(8)
+        mode = int(status_bits[:2], 2)
+        dstsetting = int(status_bits[2:3], 2)
+        langateway = int(status_bits[3:4], 2)
+        is_locked = int(status_bits[4:5], 2)
+        rferror = int(status_bits[5:6], 2)
+        battery_low = int(status_bits[6:7], 2)
+        display_actual_temperature = bool(int(payload[2:4], 16))
+        desired_temperature_raw = bin(int(payload[4:6], 16))[2:].zfill(8)
+        desired_temperature = int(desired_temperature_raw[1:8], 2)/2
+        heater_temperature = ""
+
+        null1 = False
+        if len(payload) > 6:
+            null1 = payload[6:8]
+
+        if len(payload) > 8:
+            heater_temperature = payload[8:10]
+
+        null2 = False
+        if len(payload) > 10:
+            null2 = payload[10:12]
+
+        if len(payload) > 12:
+            temperature = ((int(desired_temperature_raw[0], 2) << 8) + int(payload[12:], 16)) / 10
+
+        until_str = ""
+        if null1 and null2:
+            until_str = parseDateTime(null1, heater_temperature, null2)
+        else:
+            temperature = int(heater_temperature, 16)/10
+
+        result = {
+            "mode": MODE_IDS[mode],
+            "dstsetting": bool(dstsetting),
+            "langateway": bool(langateway),
+            "is_locked": bool(is_locked),
+            "rferror": bool(rferror),
+            "battery_low": bool(battery_low),
+            "desired_temperature": desired_temperature,
+            "display_actual_temperature": display_actual_temperature,
+            "temperature": temperature,
+            "until_str": until_str
+        }
+        return result
+
+    @property
+    def decoded_payload(self):
+        result = WallThermostatStateMessage.decode_status(self.payload)
+        return result
+
+
+def parseDateTime(byte1, byte2, byte3):
+    day = int(byte1, 16) & 0x1F
+    month = ((int(byte1, 16) & 0xE0) >> 4) | (int(byte2, 16) >> 7)
+    year = int(byte2, 16) & 0x3F
+    time = int(byte3, 16) & 0x3F
+    if time%2:
+        time = int(time/2) + ':30'
+    else:
+        time = int(time/2) + ":00"
+
+    return {
+        "day": day,
+        "month": month,
+        "year": year,
+        "time": time
+    }
 
 
 class SetDisplayActualTemperatureMessage(MoritzMessage):

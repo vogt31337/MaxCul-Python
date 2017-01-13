@@ -38,7 +38,9 @@ from moritzprotocol.messages import (
     ShutterContactStateMessage,
     ConfigValveMessage,
     SetGroupIdMessage,
-    AddLinkPartnerMessage
+    AddLinkPartnerMessage,
+    WallThermostatStateMessage,
+    WallThermostatControlMessage
 )
 from moritzprotocol.signals import thermostatstate_received, device_pair_accepted, device_pair_request
 
@@ -200,6 +202,8 @@ class CULMessageThread(threading.Thread):
         self.thermostat_states_lock = threading.Lock()
         self.shuttercontact_states = defaultdict(dict)
         self.shuttercontact_states_lock = threading.Lock()
+        self.wallthermostat_states = defaultdict(dict)
+        self.wallthermostat_states_lock = threading.Lock()
         self.com_send_queue = queue.Queue()
         self.com_receive_queue = queue.Queue()
         self.com_thread = CULComThread(self.com_send_queue, self.com_receive_queue, device_path, baudrate)
@@ -316,24 +320,35 @@ class CULMessageThread(threading.Thread):
                 return
 
         elif isinstance(msg, ShutterContactStateMessage):
-
-            #send a assoc message to provocate ack from shutter
-            ansmsg = AddLinkPartnerMessage()
-            ansmsg.counter = msg.counter+1
-            ansmsg.sender_id = CUBE_ID
-            ansmsg.receiver_id = msg.sender_id
-            ansmsg.group_id = msg.group_id
-            ansPayload = {
-                'assocDevice': 1237277,
-                'assocDeviceType': 'HeatingThermostat'
-            }
-            self.command_queue.put((ansmsg, ansPayload))
-
             with self.shuttercontact_states_lock:
                 message_logger.info("shuttercontact updated %s" % msg)
                 self.shuttercontact_states[msg.sender_id].update(msg.decoded_payload)
                 self.shuttercontact_states[msg.sender_id]['last_updated'] = datetime.now()
                 self.shuttercontact_states[msg.sender_id]['signal_strenth'] = signal_strenth
+            return
+
+        elif isinstance(msg, WallThermostatStateMessage):
+            with self.wallthermostat_states_lock:
+                message_logger.info("wallthermostat updated %s" % msg)
+                self.wallthermostat_states[msg.sender_id].update(msg.decoded_payload)
+                self.wallthermostat_states[msg.sender_id]['last_updated'] = datetime.now()
+                self.wallthermostat_states[msg.sender_id]['signal_strenth'] = signal_strenth
+            return
+
+        elif isinstance(msg, SetTemperatureMessage):
+            with self.wallthermostat_states_lock:
+                message_logger.info("wallthermostat updated %s" % msg)
+                self.wallthermostat_states[msg.sender_id].update(msg.decoded_payload)
+                self.wallthermostat_states[msg.sender_id]['last_updated'] = datetime.now()
+                self.wallthermostat_states[msg.sender_id]['signal_strenth'] = signal_strenth
+            return
+
+        elif isinstance(msg, WallThermostatControlMessage):
+            with self.wallthermostat_states_lock:
+                message_logger.info("wallthemostat control update %s" % msg)
+                self.wallthermostat_states[msg.sender_id].update(msg.decoded_payload)
+                self.wallthermostat_states[msg.sender_id]['last_updated'] = datetime.now()
+                self.wallthermostat_states[msg.sender_id]['signal_strenth'] = signal_strenth
             return
 
         message_logger.warning("Unhandled Message of type %s, contains %s" % (msg.__class__.__name__, str(msg)))
