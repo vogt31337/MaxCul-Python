@@ -283,15 +283,16 @@ def set_groupId():
 
 @app.route("/set_assoc", methods=["GET", "POST"])
 def set_assoc():
+    devices = Devices.query.filter_by(paired=True)
     if not request.form:
         content = """<html><form action="" method="POST"><select name="device">"""
-        for device in Devices.query.filter_by(paired=True):
-            content += """<option value="%s">%s</option>""" % (device.sender_id, device.name)
+        for device in devices:
+            content += """<option value="%s">%s %s</option>""" % (device.sender_id, device.name, device.device_type)
 
         content += """</select><select name="assocDevice">"""
 
-        for device in Devices.query.filter_by(paired=True):
-            content += """<option value="%s">%s</option>""" % (device.sender_id, device.name)
+        for device in devices:
+            content += """<option value="%s">%s %s</option>""" % (device.sender_id, device.name, device.device_type)
         content += """<input type=submit value="set"></form></html>"""
         return content
     msg = AddLinkPartnerMessage()
@@ -301,7 +302,7 @@ def set_assoc():
     msg.group_id = 0
     payload = {
         'assocDevice':  request.form["assocDevice"],
-        'assocDeviceType': 'ShutterContact'
+        'assocDeviceType': devices.filter_by(sender_id=request.form["assocDevice"]).one().device_type
     }
     command_queue.put((msg, payload))
     return """<html>Done. <a href="/">back</a>"""
