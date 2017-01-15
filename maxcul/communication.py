@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-    moritzprotocol.communication
+    maxcul.communication
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     There are two communication classes available which should run in their own thread.
@@ -27,8 +27,8 @@ import logbook
 from serial import Serial
 
 # custom imports
-from moritzprotocol.exceptions import MoritzError
-from moritzprotocol.messages import (
+from maxcul.exceptions import MoritzError
+from maxcul.messages import (
     MoritzMessage, MoritzError,
     PairPingMessage, PairPongMessage,
     TimeInformationMessage,
@@ -42,7 +42,7 @@ from moritzprotocol.messages import (
     WallThermostatStateMessage,
     WallThermostatControlMessage
 )
-from moritzprotocol.signals import thermostatstate_received, device_pair_accepted, device_pair_request
+from maxcul.signals import thermostatstate_received, device_pair_accepted, device_pair_request
 
 # local constants
 com_logger = logbook.Logger("CUL Serial")
@@ -50,8 +50,6 @@ message_logger = logbook.Logger("CUL Messaging")
 
 # Hardcodings based on FHEM recommendations
 CUBE_ID = 0x123456
-WALLTHERMO_ID = 0x123457
-SHUTTERCONTACT_ID = 0x123458
 
 class CULComThread(threading.Thread):
     """Low-level serial communication thread base"""
@@ -245,6 +243,15 @@ class CULMessageThread(threading.Thread):
         self.stop_requested.set()
         super(CULMessageThread, self).join(timeout)
 
+    def ackReact(self, msg):
+        ack_msg = AckMessage()
+        ack_msg.counter = msg.counter + 1
+        ack_msg.sender_id = CUBE_ID
+        ack_msg.receiver_id = msg.sender_id
+        ack_msg.group_id = msg.group_id
+        message_logger.info("ack requested by 0x%X, responding" % msg.sender_id)
+        self.command_queue.put((ack_msg, "00"))
+
     def respond_to_message(self, msg, signal_strenth):
         """Internal function to respond to incoming messages where appropriate"""
 
@@ -306,6 +313,8 @@ class CULMessageThread(threading.Thread):
                 self.thermostat_states[msg.sender_id].update(msg.decoded_payload)
                 self.thermostat_states[msg.sender_id]['last_updated'] = datetime.now()
                 self.thermostat_states[msg.sender_id]['signal_strenth'] = signal_strenth
+                if msg.receiver_id == CUBE_ID:
+                    self.ackReact(msg)
             thermostatstate_received.send(self, msg=msg)
             return
 
@@ -325,6 +334,8 @@ class CULMessageThread(threading.Thread):
                 self.shuttercontact_states[msg.sender_id].update(msg.decoded_payload)
                 self.shuttercontact_states[msg.sender_id]['last_updated'] = datetime.now()
                 self.shuttercontact_states[msg.sender_id]['signal_strenth'] = signal_strenth
+                if msg.receiver_id == CUBE_ID:
+                    self.ackReact(msg)
             return
 
         elif isinstance(msg, WallThermostatStateMessage):
@@ -333,6 +344,8 @@ class CULMessageThread(threading.Thread):
                 self.wallthermostat_states[msg.sender_id].update(msg.decoded_payload)
                 self.wallthermostat_states[msg.sender_id]['last_updated'] = datetime.now()
                 self.wallthermostat_states[msg.sender_id]['signal_strenth'] = signal_strenth
+                if msg.receiver_id == CUBE_ID:
+                    self.ackReact(msg)
             return
 
         elif isinstance(msg, SetTemperatureMessage):
@@ -341,6 +354,8 @@ class CULMessageThread(threading.Thread):
                 self.wallthermostat_states[msg.sender_id].update(msg.decoded_payload)
                 self.wallthermostat_states[msg.sender_id]['last_updated'] = datetime.now()
                 self.wallthermostat_states[msg.sender_id]['signal_strenth'] = signal_strenth
+                if msg.receiver_id == CUBE_ID:
+                    self.ackReact(msg)
             return
 
         elif isinstance(msg, WallThermostatControlMessage):
@@ -349,6 +364,8 @@ class CULMessageThread(threading.Thread):
                 self.wallthermostat_states[msg.sender_id].update(msg.decoded_payload)
                 self.wallthermostat_states[msg.sender_id]['last_updated'] = datetime.now()
                 self.wallthermostat_states[msg.sender_id]['signal_strenth'] = signal_strenth
+                if msg.receiver_id == CUBE_ID:
+                    self.ackReact(msg)
             return
 
         message_logger.warning("Unhandled Message of type %s, contains %s" % (msg.__class__.__name__, str(msg)))

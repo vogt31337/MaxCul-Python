@@ -22,9 +22,9 @@ from flask import Flask, request, url_for
 from flask_sqlalchemy import SQLAlchemy
 
 # custom imports
-from moritzprotocol.communication import CULMessageThread, CUBE_ID
-from moritzprotocol.messages import SetTemperatureMessage, ConfigValveMessage, SetGroupIdMessage, ConfigTemperaturesMessage, AddLinkPartnerMessage, TimeInformationMessage
-from moritzprotocol.signals import device_pair_accepted, device_pair_request, thermostatstate_received
+from maxcul.communication import CULMessageThread, CUBE_ID
+from maxcul.messages import SetTemperatureMessage, ConfigValveMessage, SetGroupIdMessage, ConfigTemperaturesMessage, AddLinkPartnerMessage, TimeInformationMessage
+from maxcul.signals import device_pair_accepted, device_pair_request, thermostatstate_received
 
 # local constantsfrom datetime import datetime
 encoder.FLOAT_REPR = lambda o: format(o, '.2f')

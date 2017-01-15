@@ -4,3 +4,4 @@ flask
 logbook
 pyserial
 Flask-SQLAlchemy
+sphinx-me

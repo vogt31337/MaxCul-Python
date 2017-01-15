@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-    moritzprotocol.signals
+    maxcul.signals
     ~~~~~~~~~~~~~~~~~~~~~~
 
     Hooks into communication with Moritz hardware

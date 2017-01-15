@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-    moritzprotocol.exceptions
+    maxcul.exceptions
     ~~~~~~~~~~~~~~~~~~~~~~~~~
 
     All known exceptions related to Moritz communications
