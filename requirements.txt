@@ -1,3 +1,4 @@
+pytest
 blinker
 detach
 flask
