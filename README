@@ -3,18 +3,20 @@
 This Module is forked from this Project https://github.com/jokey2k/MoritzServer.
 It can communicate over a serial connection and a cul stick with MAX! Devices build by eQ-3 http://www.eq-3.de/produkte/max.html.
 
-The CUL (or CC1101 USB Lite) is a USB Stick, which sends and receive Packages in the 868Mhz frequenz. The FHEM Community delevoped a open Firmeware for the Stick and so the MAX! Protocoll ist only one of many Protocolls you can use with this Stick.
-I build my own Stick with this Instruction: https://wiki.fhem.de/wiki/Selbstbau_CUL
+The CUL (or CC1101 USB Lite) is a USB Stick, which sends and receive Packages in the 868Mhz frequency.
+The FHEM community developed a open firmeware for the stick and so the MAX! protocol ist only one of many protocols you can use with this stick.
+I build my own stick with this instruction: https://wiki.fhem.de/wiki/Selbstbau_CUL
 But you can buy it for example here: http://www.busware.de/tiki-index.php?page=CUL
 
-This Module interprets the serial commands from the CUL and can encode Commands to send them to the CUL.
+To install the dependecys use this command.
+```
+python setup.py install
+```
 
+After that you can start a test server with this command.
+```
+python bin/moritz-server.py --cul-path /dev/ttyUSB0
+```
 
-When I bought some thermostats to implement a first step in smart home, there were only the options to either use a proprietary remote-controlled LAN-Gateway called MAX!Cube or use FHEM which is both complex and not simple to setup on a NAS.
+This open a small webserver with some tools to control your devices and see there states.
 
-So a smaller version around a CUL like FHEM supports was implemented from scratch. Idea is to just do data-keeping and leaving the interface part to some other place. Think of it as a gateway device you control yourself.
-
-Prerequisites are a CUL USB stick and a recent CULFW (1.61 or newer) on it.
-
-Connection with this command trough tunnel.
-ssh -fCo "ExitOnForwardFailure yes" -L 54333:localhost:54321 homepi "nc-l localhost 54321 </dev/serial0 >/dev/serial0" && socat pty,link=$HOME/vmodem0,wait-slave tcp:localhost:54333 &
