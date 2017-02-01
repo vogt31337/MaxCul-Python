@@ -17,6 +17,5 @@ After that you can start a test server with this command.
 ```
 python bin/moritz-server.py --cul-path /dev/ttyUSB0
 ```
-
 This open a small webserver with some tools to control your devices and see there states.
 
