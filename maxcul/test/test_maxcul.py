@@ -123,6 +123,22 @@ class MessageSampleInputTestCase(unittest.TestCase):
         self.assertEqual(msg.payload, "0E0102E117")
         self.assertEqual(msg.decoded_payload, datetime(2014, 12, 1, 2, 33, 23))
 
+    def test_wallthermostat_control_message(self):
+        sample = "Z0CB9044217A95512DC400019D9"
+        msg = MoritzMessage.decode_message(sample)
+        self.assertTrue(isinstance(msg, WallThermostatControlMessage))
+        self.assertEqual(msg.counter, 0xB9)
+        self.assertEqual(msg.flag, 0x04)
+        self.assertEqual(msg.sender_id, 0x17A955)
+        self.assertEqual(msg.receiver_id, 0x12DC40)
+        self.assertEqual(msg.group_id, 0)
+        self.assertEqual(msg.payload, "19D9")
+        self.assertEqual(msg.decoded_payload, {
+            "desired_temprature": 12,
+            "temprature": 21
+        })
+        #wallthermostat updated <WallThermostatStateMessage counter:c0 flag:4 sender:17a955 receiver:0 group:0 payload:59011900D9>
+
 
 class MessageGeneralOutputTestCase(unittest.TestCase):
     def test_encoding_without_payload(self):
