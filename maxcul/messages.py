@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-    moritzprotocol.messages
+    maxcul.messages
     ~~~~~~~~~~~~~~~~~~~~~~~
 
     Definition of known messages, based on IDs from FHEM plugin
@@ -18,7 +18,7 @@ import struct
 # environment imports
 
 # custom imports
-from moritzprotocol.exceptions import (
+from maxcul.exceptions import (
     MoritzError, LengthNotMatchingError,
     MissingPayloadParameterError, UnknownMessageError
 )
@@ -178,6 +178,7 @@ class PairPongMessage(MoritzMessage):
     def decoded_payload(self):
         return {'devicetype': DEVICE_TYPES[int(self.payload)]}
 
+
     def encode_payload(self, payload):
         return str(DEVICE_TYPES_BY_NAME[payload['devicetype']]).zfill(2)
 
@@ -198,6 +199,9 @@ class AckMessage(MoritzMessage):
             # FIXME: temporarily accepting the fact that we only handle Thermostat results
             result.update(ThermostatStateMessage.decode_status(self.payload[2:]))
         return result
+
+    def encode_flag(self):
+        return 0x4 if self.group_id else 0x0
 
     def encode_payload(self, payload=None):
         return payload

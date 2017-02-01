@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-    moritzprotocol
+    maxcul
     ~~~~~~~~~~~~~~
 
     Implementation of moritz home automation protocol

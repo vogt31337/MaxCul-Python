@@ -1,6 +1,8 @@
+pytest
 blinker
 detach
 flask
 logbook
 pyserial
 Flask-SQLAlchemy
+sphinx-me
