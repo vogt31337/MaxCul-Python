@@ -71,13 +71,13 @@ BOOST_DURATION = {
 class MoritzMessage(object):
     """Represents (de)coded message as seen on Moritz Wire"""
 
-    def __init__(self):
-        self.counter = 0
-        self.flag = 0
-        self.sender_id = 0
-        self.receiver_id = 0
-        self.group_id = 0
-        self.payload = ""
+    def __init__(self, counter=0, flag=0, sender_id=0, receiver_id=0, group_id=0, payload={}):
+        self.counter = counter
+        self.flag = flag
+        self.sender_id = sender_id
+        self.receiver_id = receiver_id
+        self.group_id = group_id
+        self.payload = payload
 
     @property
     def decoded_payload(self):
