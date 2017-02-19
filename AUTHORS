@@ -1,5 +1,16 @@
-Pymaxcul is developed by Felix Maurer and forked from MaxCul-Python.
-MaxCul-Python was written by vogt31337 and karlTGA (Karl Wolffgang <karlwolffgang@googlemail.com>) and forked from MoritzServer.
-MoritzServer was written and maintained by Markus Ullmann and contributors:
+MoritzServer is written and maintained by Markus Ullmann and contributors:
+
+Development Lead
+----------------
+
+- Karl Wolffgang <karlwolffgang@googlemail.com>
+
+Developer of the original programs
+----------------------------------
+
 - Markus Ullmann <mail@markus-ullmann.de>
+
+Patches and Suggestions
+-----------------------
+
 - Jan Boysen

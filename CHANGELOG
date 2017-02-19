@@ -1,0 +1,13 @@
+MoritzServer Changelog
+======================
+
+Here you can see the full list of changes between each Flask release.
+
+Version 0.1
+-----------
+
+Released on Feb 1th 2017
+
+Release on Pipy.
+Contains simple pairing and set command support for thermostats, shuttercontacts and wallthermostats.
+Run now under python 3.5.
