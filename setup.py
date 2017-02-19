@@ -20,7 +20,7 @@ def read(*filenames, **kwargs):
     return sep.join(buf)
 
 
-long_description = read('README', 'CHANGELOG')
+long_description = read('README')
 
 
 class PyTest(testcommand):

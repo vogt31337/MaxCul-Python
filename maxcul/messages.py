@@ -455,8 +455,8 @@ class WallThermostatControlMessage(MoritzMessage):
         rawTempratures = bin(int(payload, 16))[2:].zfill(16)
 
         result = {
-            "desired_temprature": int(rawTempratures[1:8], 2)/2,
-            "temprature": ((int(rawTempratures[0], 2) << 8) + int(rawTempratures[8:], 2))/10
+            "desired_temperature": int(rawTempratures[1:8], 2)/2,
+            "temperature": ((int(rawTempratures[0], 2) << 8) + int(rawTempratures[8:], 2))/10
         }
         return result
 

@@ -3,10 +3,11 @@ MoritzServer Changelog
 
 Here you can see the full list of changes between each Flask release.
 
-Version 1.0
+Version 0.1
 -----------
 
-Released on Dec 7th 2014
+Released on Feb 1th 2017
 
-First public release.
-Contains simple pairing and set command support
+Release on Pipy.
+Contains simple pairing and set command support for thermostats, shuttercontacts and wallthermostats.
+Run now under python 3.5.
