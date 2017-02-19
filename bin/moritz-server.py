@@ -180,11 +180,7 @@ def set_temp():
         content += """</select><select name="mode"><option>auto</option><option selected>manual</option><option>boost</option></select>"""
         content += """<input type=text name=temperature><input type=submit value="set"></form></html>"""
         return content
-    msg = SetTemperatureMessage()
-    msg.counter = 0xB9
-    msg.sender_id = CUBE_ID
-    msg.receiver_id = int(request.form['thermostat'])
-    msg.group_id = 0
+    msg = SetTemperatureMessage(0xB9, 0, CUBE_ID, int(request.form['thermostat']), 0)
     payload = {
         'desired_temperature': float(request.form["temperature"]),
         'mode': request.form["mode"],
