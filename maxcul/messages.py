@@ -184,7 +184,6 @@ class PairPongMessage(MoritzMessage):
     def decoded_payload(self):
         return {'devicetype': DEVICE_TYPES[int(self.payload)]}
 
-
     def encode_payload(self, payload):
         return str(DEVICE_TYPES_BY_NAME[payload['devicetype']]).zfill(2)
 
@@ -397,10 +396,10 @@ class ShutterContactStateMessage(MoritzMessage):
     @staticmethod
     def decode_status(payload):
         status_bits = bin(int(payload, 16))[2:].zfill(8)
-        state = int(status_bits[6:],2)
-        unkbits = int(status_bits[2:6],2)
-        rferror = int(status_bits[1],2)
-        battery_low = int(status_bits[0],2)
+        state = int(status_bits[6:], 2)
+        unkbits = int(status_bits[2:6], 2)
+        rferror = int(status_bits[1], 2)
+        battery_low = int(status_bits[0], 2)
         result = {
             "state": SHUTTER_STATES[state],
             "unkbits": unkbits,
@@ -481,7 +480,21 @@ class SetEcoTemperatureMessage(MoritzMessage):
 
 
 class PushButtonStateMessage(MoritzMessage):
-    pass
+
+    @property
+    def decoded_payload(self):
+        #TODO: No plan, what to do with the two bits in the middle.
+        status_bits = bin(int(self.payload[0], 16))[2:].zfill(3)
+        state = int(self.payload[3], 2)
+        langateway = int(status_bits[2], 2)
+        rferror = int(status_bits[0], 2)
+        battery_low = int(status_bits[1], 2)
+        return {
+            "state": bool(state),
+            "rferror": bool(rferror),
+            "battery_low": bool(battery_low),
+            "langateway": bool(langateway)
+        }
 
 
 class ThermostatStateMessage(MoritzMessage):
