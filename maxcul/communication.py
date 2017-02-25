@@ -127,7 +127,7 @@ class CULComThread(threading.Thread):
         # get CUL FW version
         def _get_cul_ver():
             self.send_command('V')
-            time.sleep(0.5)
+            time.sleep(0.3)
             self.cul_version = self._read_result() or ""
         for i in range(10):
             _get_cul_ver()
@@ -172,7 +172,7 @@ class CULComThread(threading.Thread):
 
         if command.startswith("Zs"):
             self._pending_budget = 0
-        self.com_port.write((command + "\r\n").encode())
+        self.com_port.write(("\r\n" + command + "\r\n").encode())
         #com_logger.debug("sent: %s" % command)
 
     def _read_result(self):
@@ -182,7 +182,7 @@ class CULComThread(threading.Thread):
             if self.pending_line[-1] == "\n":
                 # remove newlines at the end
                 completed_line = "".join(self.pending_line[:-2])
-                com_logger.debug("received: %s" % completed_line)
+                #com_logger.debug("received: %s" % completed_line)
                 self.pending_line = []
                 if completed_line.startswith("Z"):
                     self.read_queue.put(completed_line)
