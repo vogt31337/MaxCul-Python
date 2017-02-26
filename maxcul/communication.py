@@ -24,7 +24,7 @@ import time
 
 # environment imports
 import logbook
-import serial
+from serial import Serial
 
 # custom imports
 from maxcul.exceptions import MoritzError
@@ -122,7 +122,7 @@ class CULComThread(threading.Thread):
     def _init_cul(self):
         """Ensure CUL reports reception strength and does not do FS messages"""
 
-        self.com_port = serial.Serial(self.device_path, self.baudrate)
+        self.com_port = Serial(self.device_path, self.baudrate)
         self._read_result()
         # get CUL FW version
         def _get_cul_ver():
@@ -135,30 +135,30 @@ class CULComThread(threading.Thread):
                 com_logger.info("CUL reported version %s" % self.cul_version)
                 break
             else:
-                com_logger.info("No version from CUL reported??")
+                com_logger.info("No version from CUL reported?")
         if not self.cul_version:
             com_logger.info("No version from CUL reported. Closing and re-opening port")
             self.com_port.close()
-            self.com_port = serial.Serial(self.device_path, self.baudrate)
+            self.com_port = Serial(self.device_path, self.baudrate)
             for i in range(10):
                 _get_cul_ver()
                 if self.cul_version:
                     com_logger.info("CUL reported version %s" % self.cul_version)
                 else:
-                    com_logger.info("No version from CUL reported???")
+                    com_logger.info("No version from CUL reported?")
             com_logger.error("No version from CUL, cannot communicate")
             self.stop_requested.set()
             return
 
         # enable reporting of message strength
         self.send_command("X21")
-        time.sleep(0.5)
+        time.sleep(0.3)
         # receive Moritz messages
         self.send_command("Zr")
-        time.sleep(0.5)
+        time.sleep(0.3)
         # disable FHT mode by setting station to 0000
         self.send_command("T01")
-        time.sleep(0.5)
+        time.sleep(0.3)
         self._read_result()
 
     @property
@@ -172,12 +172,13 @@ class CULComThread(threading.Thread):
 
         if command.startswith("Zs"):
             self._pending_budget = 0
-        self.com_port.write(("\r\n" + command + "\r\n").encode())
-        #com_logger.debug("sent: %s" % command)
+        self.com_port.write((command + "\r\n").encode())
+        com_logger.debug("sent: %s" % command)
 
     def _read_result(self):
         """Reads data from port, if it's a Moritz message, forward directly, otherwise return to caller"""
-        while self.com_port.in_waiting:
+
+        while self.com_port.inWaiting():
             self.pending_line.append(self.com_port.read(1).decode("utf-8"))
             if self.pending_line[-1] == "\n":
                 # remove newlines at the end
@@ -321,16 +322,13 @@ class CULMessageThread(threading.Thread):
             return
 
         elif isinstance(msg, AckMessage):
-            if msg.decoded_payload.get("state","fail") == "ok":
+            if msg.decoded_payload["state"] == "ok":
                 thermostatstate_received.send(self, msg=msg)
                 with self.states_lock:
                     message_logger.info("ack and thermostat state updated for 0x%X" % msg.sender_id)
                     self.states[msg.sender_id].update(msg.decoded_payload)
                     self.states[msg.sender_id]['last_updated'] = datetime.now()
                     self.states[msg.sender_id]['signal_strenth'] = signal_strenth
-                return
-            elif msg.decoded_payload.get("state","fail") == "ignore":
-                message_logger.info("ack message from cube. maybe me. ignore it")
                 return
 
         elif isinstance(msg, ShutterContactStateMessage):
