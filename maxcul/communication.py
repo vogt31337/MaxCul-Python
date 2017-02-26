@@ -172,7 +172,7 @@ class CULComThread(threading.Thread):
 
         if command.startswith("Zs"):
             self._pending_budget = 0
-        self.com_port.write(("\r\n" + command + "\r\n").encode())
+        self.com_port.write((command + "\r\n").encode())
         com_logger.debug("sent: %s" % command)
 
     def _read_result(self):
