@@ -127,7 +127,7 @@ class CULComThread(threading.Thread):
         # get CUL FW version
         def _get_cul_ver():
             self.send_command('V')
-            time.sleep(0.3)
+            time.sleep(0.5)
             self.cul_version = self._read_result() or ""
         for i in range(10):
             _get_cul_ver()
@@ -152,13 +152,13 @@ class CULComThread(threading.Thread):
 
         # enable reporting of message strength
         self.send_command("X21")
-        time.sleep(0.3)
+        time.sleep(0.5)
         # receive Moritz messages
         self.send_command("Zr")
-        time.sleep(0.3)
+        time.sleep(0.5)
         # disable FHT mode by setting station to 0000
         self.send_command("T01")
-        time.sleep(0.3)
+        time.sleep(0.5)
         self._read_result()
 
     @property
