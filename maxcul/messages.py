@@ -200,6 +200,8 @@ class AckMessage(MoritzMessage):
             result["state"] = "ok"
         elif self.payload.startswith("81"):
             result["state"] = "invalid_command"
+        elif self.payload.startswith("00"):
+            result["state"] = "ignore"
         if len(self.payload) == 8:
             # FIXME: temporarily accepting the fact that we only handle Thermostat results
             result.update(ThermostatStateMessage.decode_status(self.payload[2:]))
