@@ -310,6 +310,7 @@ class MessageSampleInputListTestCase(unittest.TestCase):
         "Z0E8A020203CEE2016F69000119002828"]
         for sample in samples:
             msg = MoritzMessage.decode_message(sample)
+            print(sample)
             print(msg.decoded_payload)
 
 
@@ -438,8 +439,8 @@ class MessageSampleInputTestCase(unittest.TestCase):
         self.assertEqual(msg.group_id, 0)
         self.assertEqual(msg.payload, "19D9")
         self.assertEqual(msg.decoded_payload, {
-            "desired_temprature": 12.5,
-            "temprature": 21.7
+            "desired_temperature": 12.5,
+            "temperature": 21.7
         })
         #wallthermostat updated <WallThermostatStateMessage counter:c0 flag:4 sender:17a955 receiver:0 group:0 payload:59011900D9>
 
