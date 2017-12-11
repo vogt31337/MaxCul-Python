@@ -47,7 +47,8 @@ setup(
                       'blinker>=1.4',
                       'detach>=1.0',
                       'pyserial>=3.1.1',
-                      'pytest>=3.0.5'
+                      'pytest>=3.0.5',
+                      'logbook'
                       ],
     cmdclass={'test': PyTest},
     author_email='karlwolffgang@googlemail.com',
