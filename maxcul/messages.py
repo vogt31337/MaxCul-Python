@@ -103,12 +103,18 @@ class MoritzMessage(object):
         sender_id = int(input_string[9:15], base=16)
         receiver_id = int(input_string[15:21], base=16)
         group_id = int(input_string[21:23], base=16)
-        payload = input_string[23:]
 
         # Length: strlen(input_string) / 2 as HEX encoding, +3 for Z and length count
         if (len(input_string) - 3) != length * 2:
-            raise LengthNotMatchingError(
-                "Message length %i not matching indicated length %i" % ((len(input_string) - 3) / 2, length))
+            # For some reason there are two methods... and I've seen both with culfw 1.67...
+            # Some say the additional character(s) are some kind of CRC, currently investigating.
+            if (len(input_string) - 5) == length * 2:
+                input_string = input_string[:-2]
+            else:
+                raise LengthNotMatchingError(
+                    "Message length %i not matching indicated length %i" % ((len(input_string) - 3) / 2, length))
+
+        payload = input_string[23:]
 
         try:
             message_class = MORITZ_MESSAGE_IDS[msgtype]
