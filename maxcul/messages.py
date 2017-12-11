@@ -213,14 +213,14 @@ class TimeInformationMessage(MoritzMessage):
 
     @property
     def decoded_payload(self):
-        (years_since_200, day, hour, month_minute, month_sec) = struct.unpack(">BBBBB",
+        (years_since_2000, day, hour, month_minute, month_sec) = struct.unpack(">BBBBB",
                                                                               bytearray.fromhex(self.payload[:12]))
         return datetime(
-            year=years_since_200 + 2000,
+            year=years_since_2000 + 2000,
             minute=month_minute & 0x3F,
-            month=((month_minute >> 4) & 0x0C) | ((month_sec >> 6) & 0x03),
+            month=((month_minute & 0xC0) >> 4) | ((month_sec & 0xC0) >> 6),
             day=day,
-            hour=hour,
+            hour=hour & 0x3F,
             second=month_sec & 0x3F
         )
 
