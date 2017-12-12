@@ -219,14 +219,14 @@ class TimeInformationMessage(MoritzMessage):
 
     @property
     def decoded_payload(self):
-        (years_since_200, day, hour, month_minute, month_sec) = struct.unpack(">BBBBB",
+        (years_since_2000, day, hour, month_minute, month_sec) = struct.unpack(">BBBBB",
                                                                               bytearray.fromhex(self.payload[:12]))
         return datetime(
-            year=years_since_200 + 2000,
+            year=years_since_2000 + 2000,
             minute=month_minute & 0x3F,
-            month=((month_minute >> 4) & 0x0C) | ((month_sec >> 6) & 0x03),
+            month=((month_minute & 0xC0) >> 4) | ((month_sec & 0xC0) >> 6),
             day=day,
-            hour=hour,
+            hour=hour & 0x3F,
             second=month_sec & 0x3F
         )
 
@@ -254,7 +254,19 @@ class ConfigTemperaturesMessage(MoritzMessage):
 
     @property
     def decoded_payload(self):
-        pass
+        (comfort, eco, max, min, offset, window_Open_Temperature, window_Open_Duration) = struct.unpack(">BBBBBBB", bytearray.fromhex(self.payload[:14]))
+
+        result = {
+            'comfort_Temperature': comfort / 2,
+            'eco_Temperature': eco / 2,
+            'max_Temperature': max / 2,
+            'min_Temperature': min / 2,
+            'measurement_Offset': (offset / 2) - 3.5,
+            'window_Open_Temperature': window_Open_Temperature / 2,
+            'window_Open_Duration': window_Open_Duration * 5
+        }
+
+        return result
 
     def encode_flag(self):
         return 0x4 if self.group_id else 0x0
@@ -280,17 +292,18 @@ class ConfigTemperaturesMessage(MoritzMessage):
         max_Temperature = "%0.2X" % int(payload['max_Temperature']*2)
         min_Temperature = "%0.2X" % int(payload['min_Temperature']*2)
         measurement_Offset = "%0.2X" % int((payload['measurement_Offset'] + 3.5)*2)
-        window_Open_Temperatur = "%0.2X" % int(payload['window_Open_Temperatur']*2)
+        window_Open_Temperature = "%0.2X" % int(payload['window_Open_Temperature']*2)
         window_Open_Duration = "%0.2X" % int(payload['window_Open_Duration']/5)
 
-        content = comfort_Temperature + eco_Temperature + max_Temperature + min_Temperature + measurement_Offset + window_Open_Temperatur +window_Open_Duration
+        content = comfort_Temperature + eco_Temperature + max_Temperature + min_Temperature + measurement_Offset + \
+                  window_Open_Temperature + window_Open_Duration
         return content
-
 
 
 class ConfigValveMessage(MoritzMessage):
     """Sets valve config"""
 
+    # TODO: Check if this correct that this function is empty
     @property
     def decoded_payload(self):
         pass
@@ -363,7 +376,8 @@ class SetGroupIdMessage(MoritzMessage):
 
     @property
     def decoded_payload(self):
-        pass
+        groupId = int(self.payload[0], 16)
+        return groupId
 
     def encode_flag(self):
         return 0x4 if self.group_id else 0x0
@@ -486,16 +500,36 @@ class PushButtonStateMessage(MoritzMessage):
     @property
     def decoded_payload(self):
         #TODO: No plan, what to do with the two bits in the middle.
-        status_bits = bin(int(self.payload[0], 16))[2:].zfill(3)
-        state = int(self.payload[3], 2)
-        langateway = int(status_bits[2], 2)
-        rferror = int(status_bits[0], 2)
-        battery_low = int(status_bits[1], 2)
+        #status_bits = bin(int(self.payload[0], 16))[2:].zfill(3)
+        #state = int(self.payload[3], 2)
+        #langateway = int(status_bits[2], 2)
+        #rferror = int(status_bits[0], 2)
+        #battery_low = int(status_bits[1], 2)
+        if self.payload[0] & 0x50:
+            isRetransmission = True
+        else:
+            isRetransmission = False
+
+        if self.payload[1] & 0x1:
+            state = True
+        else:
+            state = False
+
+        if self.payload[0] & 0b100000:
+            rferror = True
+        else:
+            rferror = False
+
+        if self.payload[0] & 0b1000000:
+            battery_low = True
+        else:
+            battery_low = False
+
         return {
             "state": bool(state),
             "rferror": bool(rferror),
             "battery_low": bool(battery_low),
-            "langateway": bool(langateway)
+            "isRetransmission": bool(isRetransmission)
         }
 
 
