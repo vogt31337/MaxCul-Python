@@ -310,6 +310,7 @@ class MessageSampleInputListTestCase(unittest.TestCase):
         "Z0E8A020203CEE2016F69000119002828"]
         for sample in samples:
             msg = MoritzMessage.decode_message(sample)
+            print(sample)
             print(msg.decoded_payload)
 
 
