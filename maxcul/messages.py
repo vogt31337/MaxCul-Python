@@ -660,10 +660,11 @@ class ResetMessage(MoritzMessage):
 
 # Define at bottom so we can use the class types right away
 # Based on FHEM CUL_MAX module
+# According to https://www.domoticaforum.eu/viewtopic.php?f=66&t=7015#p52921
 MORITZ_MESSAGE_IDS = {
-    0x00: PairPingMessage,
-    0x01: PairPongMessage,
-    0x02: AckMessage,
+    0x00: PairPingMessage,  # SystemInformation
+    0x01: PairPongMessage,  # Inclusion
+    0x02: AckMessage,       # Answer
     0x03: TimeInformationMessage,
 
     0x10: ConfigWeekProfileMessage,
@@ -677,19 +678,23 @@ MORITZ_MESSAGE_IDS = {
 
     0x30: ShutterContactStateMessage,
 
-    0x40: SetTemperatureMessage,
-    0x42: WallThermostatControlMessage,
-    0x43: SetComfortTemperatureMessage,
-    0x44: SetEcoTemperatureMessage,
-
+    0x40: SetTemperatureMessage,        # ControlMode
+    #0x41: SetPointTemperature,         # <- new one
+    0x42: WallThermostatControlMessage, # SetPointAndCurrentTemperature
+    0x43: SetComfortTemperatureMessage, # ComfortTemperature
+    0x44: SetEcoTemperatureMessage,     # EcoTemperature
+    #0x45: CurrentTemperatureAndHumidity, # <- also new one
     0x50: PushButtonStateMessage,
 
     0x60: ThermostatStateMessage,
 
     0x70: WallThermostatStateMessage,
 
+    #0x80: LockManualControls,          # <- also new one
+    #0x81: DaylightSavingTimeMode,      # <- also new one
     0x82: SetDisplayActualTemperatureMessage,
 
     0xF1: WakeUpMessage,
     0xF0: ResetMessage,
+    #0xFF: TestMessage,                 # <- also new one
 }
