@@ -399,7 +399,6 @@ class RemoveGroupIdMessage(MoritzMessage):
         return overrideGroupId
 
 
-
 class ShutterContactStateMessage(MoritzMessage):
     """Non-reculary sent by Thermostats to report when valve was moved or command received."""
 
