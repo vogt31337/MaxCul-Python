@@ -97,6 +97,7 @@ def create_new_device(sender, **kw):
         db.session.add(entry)
         db.session.commit()
 
+
 @device_pair_accepted.connect
 def activate_device(sender, **kw):
     msg = kw['resp_msg']
@@ -106,6 +107,7 @@ def activate_device(sender, **kw):
     entry.paired = True
     db.session.add(entry)
     db.session.commit()
+
 
 @thermostatstate_received.connect
 def store_thermostatstate(sender, **kw):
@@ -124,6 +126,7 @@ def store_thermostatstate(sender, **kw):
     db.session.add(thermostat_state)
     db.session.commit()
 
+
 #
 # Views
 #
@@ -139,6 +142,7 @@ def index():
            "<a href='" + url_for("set_config_temperature") + "'>Set config temperature</a><br>" + \
            "<a href='" + url_for("set_temp_all") + "'>Set temp on all sensors</a>"
 
+
 @app.route("/current_states")
 def current_states():
     with message_thread.states_lock:
@@ -147,17 +151,19 @@ def current_states():
 
 @app.route("/get_devices")
 def get_devices():
-    devices = []
-    for device in Devices.query.all():
-        devices.append({
-            'sender_id': device.sender_id,
-            'serial': device.serial,
-            'firmware_version': device.firmware_version,
-            'name': device.name,
-            'paired': device.paired,
-            'device_type': device.device_type,
-        })
-    return json.dumps(devices)
+    #devices = []
+    #for device in Devices.query.all():
+    #    devices.append({
+    #        'sender_id': device.sender_id,
+    #        'serial': device.serial,
+    #        'firmware_version': device.firmware_version,
+    #        'name': device.name,
+    #        'paired': device.paired,
+    #        'device_type': device.device_type,
+    #    })
+    #return json.dumps(devices)
+    return json.dumps(message_thread.devices)
+
 
 @app.route("/set_temp", methods=["GET", "POST"])
 def set_temp():
@@ -176,6 +182,7 @@ def set_temp():
     command_queue.put((msg, payload))
     return """<html>Done. <a href="/">back</a>"""
 
+
 @app.route("/set_time", methods=["GET", "POST"])
 def set_time():
     if not request.form:
@@ -192,6 +199,7 @@ def set_time():
     payload = datetime.now()
     command_queue.put((msg, payload))
     return """<html>Done. <a href="/">back</a>"""
+
 
 @app.route("/set_boost_config", methods=["GET", "POST"])
 def set_boost_config():
@@ -219,6 +227,7 @@ def set_boost_config():
     }
     command_queue.put((msg, payload))
     return """<html>Done. <a href="/">back</a>"""
+
 
 @app.route("/set_config_temperature", methods=["GET", "POST"])
 def set_config_temperature():
@@ -265,6 +274,7 @@ def set_groupId():
     command_queue.put((msg, payload))
     return """<html>Done. <a href="/">back</a>"""
 
+
 @app.route("/set_assoc", methods=["GET", "POST"])
 def set_assoc():
     devices = Devices.query.filter_by(paired=True)
@@ -292,7 +302,6 @@ def set_assoc():
     return """<html>Done. <a href="/">back</a>"""
 
 
-
 @app.route("/set_temp_all", methods=["GET", "POST"])
 def set_temp_all():
     if not request.form:
@@ -311,6 +320,7 @@ def set_temp_all():
         }
         command_queue.put((msg, payload))
     return """<html>Done. <a href="/">back</a>"""
+
 
 #
 # Execution
