@@ -24,6 +24,7 @@ import time
 
 # environment imports
 import logbook
+import traceback
 import serial
 
 # custom imports
@@ -51,6 +52,7 @@ message_logger = logbook.Logger("CUL Messaging")
 
 # Hardcodings based on FHEM recommendations
 CUBE_ID = 0x123456
+
 
 class CULComThread(threading.Thread):
     """Low-level serial communication thread base"""
@@ -206,6 +208,7 @@ class CULMessageThread(threading.Thread):
         self.pair_as_cube = True
         self.pair_as_wallthermostat = False
         self.pair_as_ShutterContact = False
+        self.devices = list()
 
     def run(self):
         self.com_thread.start()
@@ -216,12 +219,20 @@ class CULMessageThread(threading.Thread):
                 message = MoritzMessage.decode_message(received_msg[:-2])
                 if message.receiver_id == CUBE_ID:
                     self.ackReact(message)
+
+                if not message.decoded_payload:
+                    message_logger.info("Message not implemented '%s'" % (received_msg))
+
                 signal_strength = int(received_msg[-2:], base=16)
+                self.devices.append(message.sender_id)
+                self.devices.append(message.receiver_id)
                 self.respond_to_message(message, signal_strength)
             except queue.Empty:
                 pass
-            except MoritzError as e:
-                message_logger.error("Message parsing failed, ignoring message '%s'. Reason: %s" % (received_msg, str(e)))
+            except NotImplementedError:
+                message_logger.info("Message not implemented '%s'. Error: %s" % (received_msg, traceback.format_exc()))
+            except MoritzError:
+                message_logger.error("Message parsing failed, ignoring message '%s'. Reason: %s" % (received_msg, traceback.format_exc()))
 
             try:
                 tempMsg = self.command_queue.get(True, 0.05)
@@ -233,7 +244,7 @@ class CULMessageThread(threading.Thread):
             except queue.Empty:
                 pass
             except MoritzError as e:
-                message_logger.error("Message sending failed, ignoring message '%s'. Reason: %s" % (msg, str(e)))
+                message_logger.error("Message sending failed, ignoring message '%s'. Reason: %s" % (msg, traceback.format_exc()))
 
             time.sleep(0.3)
 
