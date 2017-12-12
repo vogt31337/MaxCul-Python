@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-from datetime import datetime
+import traceback
 
 myPath = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, myPath + '/../../')
@@ -312,6 +312,14 @@ class MessageSampleInputListTestCase(unittest.TestCase):
             msg = MoritzMessage.decode_message(sample)
             print(sample)
             print(msg.decoded_payload)
+
+    def test_unknown_messages(self):
+        sample = "Z0E250210039EA5016F6900011904283C"
+        msg = MoritzMessage.decode_message(sample)
+        try:
+            print(msg.decoded_payload)
+        except NotImplementedError as e:
+            print("Message not implemented '%s'. Error: %s" % (msg, traceback.format_exc()))
 
 
 class MessageSampleInputTestCase(unittest.TestCase):
