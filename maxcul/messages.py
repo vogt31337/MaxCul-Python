@@ -22,62 +22,19 @@ from maxcul.exceptions import (
     MoritzError, LengthNotMatchingError,
     MissingPayloadParameterError, UnknownMessageError
 )
-
-# local constants
-DEVICE_TYPES = {
-    0: "Cube",
-    1: "HeatingThermostat",
-    2: "HeatingThermostatPlus",
-    3: "WallMountedThermostat",
-    4: "ShutterContact",
-    5: "PushButton"
-}
-DEVICE_TYPES_BY_NAME = dict((v, k) for k, v in DEVICE_TYPES.items())
-
-MODE_IDS = {
-    0: "auto",
-    1: "manual",
-    2: "temporary",
-    3: "boost",
-}
-
-SHUTTER_STATES = {
-    0: "close",
-    2: "open",
-}
-
-DECALC_DAYS = {
-    "Sat" : 0,
-    "Sun" : 1,
-    "Mon" : 2,
-    "Tue" : 3,
-    "Wed" : 4,
-    "Thu" : 5,
-    "Fri" : 6
-}
-
-BOOST_DURATION = {
-    0 : 0,
-    5 : 1,
-    10: 2,
-    15: 3,
-    20: 4,
-    25: 5,
-    30: 6,
-    60: 7
-}
+from maxcul.const import *
 
 
 class MoritzMessage(object):
     """Represents (de)coded message as seen on Moritz Wire"""
+    FIELDS = dict(counter = 0, flag = 0, sender_id = 0,
+                  receiver_id = 0, group_id = 0)
 
-    def __init__(self):
-        self.counter = 0
-        self.flag = 0
-        self.sender_id = 0
-        self.receiver_id = 0
-        self.group_id = 0
-        self.payload = ""
+    def __init__(self, **kwargs):
+        fields = {**MoritzMessage.FIELDS, **self.FIELDS}
+        for key, default_value in fields.items():
+            self.__dict__[key] = kwargs.get(key, default_value)
+        self.payload = ''
 
     @property
     def decoded_payload(self):
@@ -153,15 +110,25 @@ class MoritzMessage(object):
         message = "Zs" + length.zfill(2) + message
         return message
 
+    def respond_with(self, klass, **kwargs):
+        resp_params = dict(counter = self.counter + 1,
+                           sender_id = self.receiver_id,
+                           receiver_id = self.sender_id,
+                           group_id = self.group_id)
+        params = {**resp_params, **kwargs}
+        return klass(**params)
+
     def __repr__(self):
-        return "<%s counter:%x flag:%x sender:%x receiver:%x group:%x payload:%s>" % (
-            self.__class__.__name__, self.counter, self.flag, self.sender_id, self.receiver_id, self.group_id,
-            self.payload
+        return "<%s counter:%x flag:%x sender:%x receiver:%x group:%x >" % (
+            self.__class__.__name__, self.counter, self.flag, self.sender_id, self.receiver_id, self.group_id
         )
 
 
 class PairPingMessage(MoritzMessage):
     """Thermostats send this request on long boost keypress"""
+    FIELDS = dict(firmware_version = 0, device_type = None,
+                  selftest_result = None, device_serial = None,
+                  pairmode = 'pair' )
 
     @property
     def decoded_payload(self):
@@ -179,6 +146,7 @@ class PairPingMessage(MoritzMessage):
 
 class PairPongMessage(MoritzMessage):
     """Awaited after PairPingMessage is sent by component"""
+    FIELDS = dict(devicetype = 'Cube')
 
     @property
     def decoded_payload(self):
@@ -193,6 +161,7 @@ class AckMessage(MoritzMessage):
     """Last command received and acknowledged.
 	   Occasionally if the communication is ongoing, this might get lost.
 	   So don't rely on it but check state afterwards instead"""
+    FIELDS = dict(state = '')
 
     @property
     def decoded_payload(self):
@@ -215,6 +184,8 @@ class AckMessage(MoritzMessage):
 
 class TimeInformationMessage(MoritzMessage):
     """Current time is either requested or encoded. Request simply is empty payload"""
+    FIELDS = dict(year = 0, month = 0, day = 0,
+                  hour = 0, minute = 0, second = 0)
 
     @property
     def decoded_payload(self):
@@ -250,6 +221,9 @@ class ConfigWeekProfileMessage(MoritzMessage):
 
 class ConfigTemperaturesMessage(MoritzMessage):
     """Sets temperatur config"""
+    FIELDS = dict(comfort_Temperature = 0, eco_Temperature = 0, max_Temperature = 0,
+                  min_Temperature = 0, measurement_Offset = 0,
+                  window_open_Temperature = 0, window_Open_Duration = 0)
 
     @property
     def decoded_payload(self):

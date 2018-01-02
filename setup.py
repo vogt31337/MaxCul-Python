@@ -20,7 +20,7 @@ def read(*filenames, **kwargs):
     return sep.join(buf)
 
 
-long_description = read('README', 'CHANGELOG')
+long_description = read('README.md')
 
 
 class PyTest(testcommand):
@@ -36,23 +36,16 @@ class PyTest(testcommand):
 
 
 setup(
-    name='maxcul',
+    name='pymaxcul',
     version=maxcul.__version__,
-    url='https://github.com/karlTGA/MaxCul-Python',
+    url='https://github.com/maufl/pymaxcul',
     license='BSD License',
-    author='Markus Ullmann, Karl Wolffgang',
-    tests_require=['pytest'],
-    install_requires=['Flask>=0.12',
-                      'Flask-SQLAlchemy>=2.1',
-                      'blinker>=1.4',
-                      'detach>=1.0',
-                      'pyserial>=3.1.1',
-                      'pytest>=3.0.5',
-                      'logbook'
-                      ],
+    author='Markus Ullmann, Karl Wolffgang, Felix Maurer',
+    tests_require=['pytest>=3.0.5'],
+    install_requires=['pyserial>=3.1.1'],
     cmdclass={'test': PyTest},
-    author_email='karlwolffgang@googlemail.com',
-    description='Access with Python MAX! Devices over a CUL Stick',
+    author_email='github@maufl.de',
+    description='Talk to eq-3 MAX! devices using a CUL stick',
     long_description=long_description,
     packages=['maxcul'],
     include_package_data=True,
