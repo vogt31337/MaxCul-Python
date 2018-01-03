@@ -14,7 +14,7 @@ READLINE_TIMEOUT = 0.5
 COMMAND_REQUEST_BUDGET = 'X'
 
 
-class CULComThread(threading.Thread):
+class CulIoThread(threading.Thread):
     """Low-level serial communication thread base"""
 
     # pylint: disable=too-many-instance-attributes
@@ -54,11 +54,10 @@ class CULComThread(threading.Thread):
             self._loop()
 
     def _loop(self):
-        if self._remaining_budget == 0:
-            self._writeline(COMMAND_REQUEST_BUDGET)
         self._receive_message()
         self._send_pending_message()
-        # give the system 200ms to do something else, we're embedded....
+        if self._remaining_budget == 0:
+            self._writeline(COMMAND_REQUEST_BUDGET)
         time.sleep(0.2)
 
     def _receive_message(self):
@@ -67,12 +66,12 @@ class CULComThread(threading.Thread):
         if line is not None:
             if line.startswith("21  "):
                 self._remaining_budget = int(line[3:].strip()) * 10 or 1
-                LOGGER.info(
+                LOGGER.debug(
                     "Got pending budget: %sms", self._remaining_budget)
-            if line.startswith("Z"):
+            elif line.startswith("Z"):
                 self.read_queue.put(line)
             else:
-                LOGGER.info("Got unhandled response from CUL: '%s'", line)
+                LOGGER.debug("Got unhandled response from CUL: '%s'", line)
 
     def _send_pending_message(self):
         try:
@@ -108,7 +107,7 @@ class CULComThread(threading.Thread):
             time.sleep(1)
             self._cul_version = self._readline() or None
             if self._cul_version is not None:
-                LOGGER.info("CUL reported version %s", self._cul_version)
+                LOGGER.debug("CUL reported version %s", self._cul_version)
                 break
             else:
                 LOGGER.info("No version from CUL reported?")
@@ -127,6 +126,7 @@ class CULComThread(threading.Thread):
         time.sleep(0.3)
 
     def _writeline(self, command):
+        LOGGER.debug("Writing command %s", command)
         """Sends given command to CUL. Invalidates has_send_budget if command starts with Zs"""
         if command.startswith("Zs"):
             self._remaining_budget = 0
@@ -134,6 +134,7 @@ class CULComThread(threading.Thread):
 
     def _readline(self):
         line = self._com_port.readline()
-        if line is not None:
-            line = line.decode('utf-8')[:-2]
-        return line
+        line = line.decode('utf-8')[:-2]
+        if line:
+            return line
+        return None

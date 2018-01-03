@@ -13,6 +13,16 @@
 
 # python imports
 
+from maxcul.communication import MaxConnection
+from maxcul.const import (
+    # Events
+    EVENT_DEVICE_PAIRED,
+    EVENT_DEVICE_REPAIRED,
+    EVENT_THERMOSTAT_UPDATE,
+    # Thermostat modes
+    MODE_AUTO, MODE_BOOST, MODE_MANUAL, MODE_TEMPORARY
+)
+
 # environment imports
 
 # custom imports
