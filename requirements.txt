@@ -1,5 +1,3 @@
 pytest
-blinker
-detach
 pyserial
 sphinx-me
