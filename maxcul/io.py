@@ -1,3 +1,4 @@
+""" This module implements the low level logic of talking to the serial CUL device"""
 import queue
 from collections import deque
 import threading
@@ -12,9 +13,11 @@ READLINE_TIMEOUT = 0.5
 
 COMMAND_REQUEST_BUDGET = 'X'
 
+
 class CULComThread(threading.Thread):
     """Low-level serial communication thread base"""
 
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, device_path, baudrate):
         super().__init__()
         self.read_queue = queue.Queue()
@@ -22,11 +25,13 @@ class CULComThread(threading.Thread):
         self._device_path = device_path
         self._baudrate = baudrate
         self._stop_requested = threading.Event()
-        self._cul_version = ""
+        self._cul_version = None
+        self._com_port = None
         self._remaining_budget = 0
 
     @property
     def cul_version(self):
+        """Returns the version reported from the CUL stick"""
         return self._cul_version
 
     @property
@@ -35,9 +40,11 @@ class CULComThread(threading.Thread):
         return self._remaining_budget >= 2000
 
     def enqueue_command(self, command):
+        """Pushes a new command to be sent to the CUL stick onto the queue"""
         self._send_queue.appendleft(command)
 
     def stop(self, timeout=None):
+        """Stops the loop of this thread and waits for it to exit"""
         self._stop_requested.set()
         self.join(timeout)
 
@@ -60,11 +67,12 @@ class CULComThread(threading.Thread):
         if line is not None:
             if line.startswith("21  "):
                 self._remaining_budget = int(line[3:].strip()) * 10 or 1
-                LOGGER.info("Got pending budget: %sms" % self._remaining_budget)
+                LOGGER.info(
+                    "Got pending budget: %sms", self._remaining_budget)
             if line.startswith("Z"):
                 self.read_queue.put(line)
             else:
-                LOGGER.info("Got unhandled response from CUL: '%s'" % line)
+                LOGGER.info("Got unhandled response from CUL: '%s'", line)
 
     def _send_pending_message(self):
         try:
@@ -78,26 +86,29 @@ class CULComThread(threading.Thread):
             pass
 
     def _init_cul(self):
-        for i in range(10):
+        for _ in range(10):
             self._open_serial_device()
             if self._com_port is not None:
                 break
 
-        if self._com_port is None: 
+        if self._com_port is None:
             LOGGER.error("No version from CUL, cannot communicate")
             self._stop_requested.set()
 
     def _open_serial_device(self):
-        self._com_port = Serial(self._device_path, self._baudrate, timeout=READLINE_TIMEOUT)
+        self._com_port = Serial(
+            self._device_path,
+            self._baudrate,
+            timeout=READLINE_TIMEOUT)
         # was required for my nanoCUL
         time.sleep(2)
         # get CUL FW version
-        for i in range(10):
+        for _ in range(10):
             self._writeline("V")
             time.sleep(1)
             self._cul_version = self._readline() or None
             if self._cul_version is not None:
-                LOGGER.info("CUL reported version %s" % self._cul_version)
+                LOGGER.info("CUL reported version %s", self._cul_version)
                 break
             else:
                 LOGGER.info("No version from CUL reported?")

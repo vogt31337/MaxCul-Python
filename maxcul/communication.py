@@ -27,38 +27,44 @@ import logging
 # custom imports
 from maxcul.exceptions import MoritzError
 from maxcul.messages import (
-    MoritzMessage, MoritzError,
+    MoritzMessage,
     PairPingMessage, PairPongMessage,
     TimeInformationMessage,
     SetTemperatureMessage,
     ThermostatStateMessage,
     AckMessage,
     ShutterContactStateMessage,
-    ConfigValveMessage,
-    SetGroupIdMessage,
-    AddLinkPartnerMessage,
     WallThermostatStateMessage,
     WallThermostatControlMessage
 )
 from maxcul.io import CULComThread
-from maxcul.const import *
+from maxcul.const import EVENT_DEVICE_PAIRED, EVENT_DEVICE_REPAIRED, EVENT_THERMOSTAT_UPDATE
 
 # local constants
 LOGGER = logging.getLogger(__name__)
 
 # Hardcodings based on FHEM recommendations
-CUBE_ID = 0x123456
+DEFAULT_CUBE_ID = 0x123456
+DEFAULT_DEVICE = '/dev/ttyUSB0'
+DEFAULT_BAUDRATE = '38400'
+
 
 class CULMessageThread(threading.Thread):
     """High level message processing"""
 
-    def __init__(self, device_path = '/dev/ttyUSB0', baudrate = '38400', sender_id = CUBE_ID, callback = None, paired_devices = []):
+    def __init__(
+            self,
+            device_path=DEFAULT_DEVICE,
+            baudrate=DEFAULT_BAUDRATE,
+            sender_id=DEFAULT_CUBE_ID,
+            callback=None,
+            paired_devices=None):
         super(CULMessageThread, self).__init__()
-        self.sender_id = CUBE_ID
+        self.sender_id = sender_id
         self.com_thread = CULComThread(device_path, baudrate)
         self.stop_requested = threading.Event()
         self._pairing_enabled = threading.Event()
-        self._paired_devices = paired_devices
+        self._paired_devices = paired_devices or []
         self.callback = callback
         self._msg_count = 0
 
@@ -75,18 +81,21 @@ class CULMessageThread(threading.Thread):
         self.join(timeout)
 
     def enable_pairing(self, duration=30):
-        LOGGER.info("Enable pairing for {} seconds".format(duration))
+        LOGGER.info("Enable pairing for %d seconds", duration)
         self._pairing_enabled.set()
+
         def clear_pair():
             self._pairing_enabled.clear()
         threading.Timer(duration, clear_pair).start()
 
     def set_temperature(self, receiver_id, temperature, mode):
-        LOGGER.info("Setting temperature for {} to {} {}".format(receiver_id, temperature, mode))
+        LOGGER.info(
+            "Setting temperature for %d to %d %s",
+            receiver_id, temperature, mode)
         msg = SetTemperatureMessage(
-            counter = self._next_counter(),
-            sender_id = self.sender_id,
-            receiver_id = receiver_id
+            counter=self._next_counter(),
+            sender_id=self.sender_id,
+            receiver_id=receiver_id
         )
         payload = {
             'desired_temperature': float(temperature),
@@ -106,37 +115,46 @@ class CULMessageThread(threading.Thread):
             self._handle_message(message, signal_strength)
         except queue.Empty:
             pass
-        except MoritzError as e:
-            LOGGER.error("Message parsing failed, ignoring message '%s'. Reason: %s" % (received_msg, str(e)))
+        except MoritzError as err:
+            LOGGER.error(
+                "Message parsing failed, ignoring message '%s'. Reason: %s",
+                received_msg, err)
 
     def _send_message(self, msg, payload):
         try:
             raw_message = msg.encode_message(payload)
-            LOGGER.debug("send type %s" % msg)
-            LOGGER.debug("send raw line %s" % raw_message)
             self.com_thread.enqueue_command(raw_message)
-        except MoritzError as e:
-            LOGGER.error("Message sending failed, ignoring message '%s'. Reason: %s" % (msg, str(e)))
+        except MoritzError as err:
+            LOGGER.error(
+                "Message sending failed, ignoring message '%s'. Reason: %s",
+                msg, err)
 
     def _send_ack(self, msg):
-        ack_msg = msg.respond_with(AckMessage, counter = msg.counter, sender_id = self.sender_id)
-        LOGGER.info("ack requested by 0x%X, responding" % msg.sender_id)
+        ack_msg = msg.respond_with(
+            AckMessage,
+            counter=msg.counter,
+            sender_id=self.sender_id)
         self._send_message(ack_msg, "00")
 
     def _send_timeinformation(self, msg):
-        resp_msg = msg.respond_with(TimeInformationMessage, counter = self._next_counter(), sender_id = self.sender_id)
-        LOGGER.info("time information requested by 0x%X, responding" % msg.sender_id)
+        resp_msg = msg.respond_with(
+            TimeInformationMessage,
+            counter=self._next_counter(),
+            sender_id=self.sender_id)
         self._send_message(resp_msg, datetime.now())
 
     def _send_pong(self, msg):
-        resp_msg = msg.respond_with(PairPongMessage, counter = self._next_counter(), sender_id = self.sender_id)
+        resp_msg = msg.respond_with(
+            PairPongMessage,
+            counter=self._next_counter(),
+            sender_id=self.sender_id)
         if self.com_thread.has_send_budget:
             self._send_message(resp_msg, {"devicetype": "Cube"})
             self._paired_devices.append(msg.sender_id)
             return True
-        else:
-            LOGGER.info("NOT responding to pair send budget is insufficient to be on time")
-            return False
+        LOGGER.info(
+            "NOT responding to pair send budget is insufficient to be on time")
+        return False
 
     def _handle_message(self, msg, signal_strenth):
         """Internal function to respond to incoming messages where appropriate"""
@@ -144,12 +162,9 @@ class CULMessageThread(threading.Thread):
             # discard messages not addressed to us
             return
 
-        LOGGER.debug("Received message {} ({})".format(msg, signal_strenth))
-        if msg.decoded_payload:
-            LOGGER.debug("Payload is {}".format(msg.decoded_payload))
+        LOGGER.debug("Received message %s (%d)", msg, signal_strenth)
 
         if isinstance(msg, PairPingMessage):
-            LOGGER.info("Received pair request from {}".format(msg.sender_id))
             # Some peer wants to pair. Let's see...
             if msg.receiver_id == 0x0:
                 # pairing after factory reset
@@ -157,14 +172,20 @@ class CULMessageThread(threading.Thread):
                     LOGGER.info("Pairing disabled, not pairing to new device")
                     return
                 if self._send_pong(msg):
-                    self._call_callback(EVENT_DEVICE_PAIRED, { 'device_id': msg.sender_id })
+                    self._call_callback(
+                        EVENT_DEVICE_PAIRED, {
+                            'device_id': msg.sender_id})
             elif msg.receiver_id == self.sender_id:
                 # pairing after battery replacement
                 if self._send_pong(msg):
-                    self._call_callback(EVENT_DEVICE_REPAIRED, { 'device_id': msg.sender_id })
+                    self._call_callback(
+                        EVENT_DEVICE_REPAIRED, {
+                            'device_id': msg.sender_id})
             else:
                 # pair to someone else after battery replacement, don't care
-                LOGGER.info("pair after battery replacement sent to other device 0x%X, ignoring" % msg.receiver_id)
+                LOGGER.info(
+                    "pair after battery replacement sent to other device 0x%X, ignoring",
+                    msg.receiver_id)
             return
 
         if msg.receiver_id == 0 and msg.sender_id not in self._paired_devices:
@@ -177,23 +198,24 @@ class CULMessageThread(threading.Thread):
                 self._send_timeinformation(msg)
 
         elif isinstance(msg, ThermostatStateMessage):
-            LOGGER.info("thermostat state updated for 0x%X" % msg.sender_id)
+            LOGGER.info("thermostat state updated for 0x%X", msg.sender_id)
             self._send_ack(msg)
             self._propagate_thermostat_change(msg)
 
         elif isinstance(msg, AckMessage):
             if "state" in msg.decoded_payload and msg.decoded_payload["state"] == "ok":
                 self._propagate_thermostat_change(msg)
-                LOGGER.info("ack and thermostat state updated for 0x%X" % msg.sender_id)
+                LOGGER.info(
+                    "ack and thermostat state updated for 0x%X",
+                    msg.sender_id)
 
-        elif isinstance(msg, ShutterContactStateMessage) \
-             or isinstance(msg, WallThermostatStateMessage) \
-             or isinstance(msg, SetTemperatureMessage) \
-             or isinstance(msg, WallThermostatControlMessage):
+        elif isinstance(msg, ShutterContactStateMessage, WallThermostatStateMessage, SetTemperatureMessage, WallThermostatControlMessage):
             self._send_ack(msg)
 
         else:
-            LOGGER.warning("Unhandled Message of type %s, contains %s" % (msg.__class__.__name__, str(msg)))
+            LOGGER.warning(
+                "Unhandled Message of type %s, contains %s",
+                msg.__class__.__name__, msg)
 
     def _propagate_thermostat_change(self, msg):
         payload = msg.decoded_payload
@@ -211,5 +233,6 @@ class CULMessageThread(threading.Thread):
         if self.callback:
             try:
                 self.callback(event, payload)
-            except Exception as e:
-                LOGGER.warn("Error while calling callback for thermostat update: {}".format(e))
+            except Exception as err:
+                LOGGER.warning(
+                    "Error while calling callback for thermostat update: %s", err)
