@@ -70,7 +70,7 @@ class CULMessageThread(threading.Thread):
 
     def stop(self, timeout=None):
         LOGGER.info("Stopping MAXCUL")
-        self.com_thread.join(timeout)
+        self.com_thread.stop(timeout)
         self.stop_requested.set()
         self.join(timeout)
 
@@ -114,7 +114,7 @@ class CULMessageThread(threading.Thread):
             raw_message = msg.encode_message(payload)
             LOGGER.debug("send type %s" % msg)
             LOGGER.debug("send raw line %s" % raw_message)
-            self.com_thread.send_queue.put(raw_message)
+            self.com_thread.enqueue_command(raw_message)
         except MoritzError as e:
             LOGGER.error("Message sending failed, ignoring message '%s'. Reason: %s" % (msg, str(e)))
 
