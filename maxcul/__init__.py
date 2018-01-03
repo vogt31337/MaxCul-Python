@@ -13,14 +13,19 @@
 
 # python imports
 
-from maxcul.communication import MaxConnection
-from maxcul.const import (
+from maxcul._communication import MaxConnection
+from maxcul._const import (
     # Events
     EVENT_DEVICE_PAIRED,
     EVENT_DEVICE_REPAIRED,
     EVENT_THERMOSTAT_UPDATE,
     # Thermostat modes
-    MODE_AUTO, MODE_BOOST, MODE_MANUAL, MODE_TEMPORARY
+    MODE_AUTO, MODE_BOOST, MODE_MANUAL, MODE_TEMPORARY,
+    # Temperature constants
+    MIN_TEMPERATURE, MAX_TEMPERATURE
+)
+from maxcul._exceptions import (
+    MoritzError, UnknownMessageError, LengthNotMatchingError, MissingPayloadParameterError
 )
 
 # environment imports

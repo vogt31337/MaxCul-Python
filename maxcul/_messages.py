@@ -18,11 +18,11 @@ import struct
 # environment imports
 
 # custom imports
-from maxcul.exceptions import (
+from maxcul._exceptions import (
     MoritzError, LengthNotMatchingError,
     MissingPayloadParameterError, UnknownMessageError
 )
-from maxcul.const import *
+from maxcul._const import *
 
 
 class MoritzMessage(object):

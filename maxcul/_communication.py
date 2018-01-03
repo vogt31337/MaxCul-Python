@@ -25,8 +25,8 @@ import time
 import logging
 
 # custom imports
-from maxcul.exceptions import MoritzError
-from maxcul.messages import (
+from maxcul._exceptions import MoritzError
+from maxcul._messages import (
     MoritzMessage,
     PairPingMessage, PairPongMessage,
     TimeInformationMessage,
@@ -38,8 +38,8 @@ from maxcul.messages import (
     WallThermostatControlMessage,
     WakeUpMessage
 )
-from maxcul.io import CulIoThread
-from maxcul.const import EVENT_DEVICE_PAIRED, EVENT_DEVICE_REPAIRED, EVENT_THERMOSTAT_UPDATE
+from maxcul._io import CulIoThread
+from maxcul._const import EVENT_DEVICE_PAIRED, EVENT_DEVICE_REPAIRED, EVENT_THERMOSTAT_UPDATE
 
 # local constants
 LOGGER = logging.getLogger(__name__)
