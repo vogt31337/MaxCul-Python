@@ -39,7 +39,11 @@ from maxcul._messages import (
     WakeUpMessage
 )
 from maxcul._io import CulIoThread
-from maxcul._const import EVENT_DEVICE_PAIRED, EVENT_DEVICE_REPAIRED, EVENT_THERMOSTAT_UPDATE
+from maxcul._const import (
+    EVENT_DEVICE_PAIRED, EVENT_DEVICE_REPAIRED, EVENT_THERMOSTAT_UPDATE,
+    ATTR_DEVICE_ID, ATTR_DESIRED_TEMPERATURE, ATTR_MEASURED_TEMPERATURE,
+    ATTR_MODE, ATTR_BATTERY_LOW
+)
 
 # local constants
 LOGGER = logging.getLogger(__name__)
@@ -181,13 +185,13 @@ class MaxConnection(threading.Thread):
                 if self._send_pong(msg):
                     self._call_callback(
                         EVENT_DEVICE_PAIRED, {
-                            'device_id': msg.sender_id})
+                            ATTR_DEVICE_ID: msg.sender_id})
             elif msg.receiver_id == self.sender_id:
                 # pairing after battery replacement
                 if self._send_pong(msg):
                     self._call_callback(
                         EVENT_DEVICE_REPAIRED, {
-                            'device_id': msg.sender_id})
+                            ATTR_DEVICE_ID: msg.sender_id})
             else:
                 # pair to someone else after battery replacement, don't care
                 LOGGER.debug(
@@ -223,11 +227,11 @@ class MaxConnection(threading.Thread):
     def _propagate_thermostat_change(self, msg):
         payload = msg.decoded_payload
         payload = {
-            'device_id': msg.sender_id,
-            'measured_temperature': payload.get('measured_temperature'),
-            'desired_temperature': payload.get('desired_temperature'),
-            'mode': payload.get('mode'),
-            'battery_low': payload.get('battery_low')
+            ATTR_DEVICE_ID: msg.sender_id,
+            ATTR_MEASURED_TEMPERATURE: payload.get('measured_temperature'),
+            ATTR_DESIRED_TEMPERATURE: payload.get('desired_temperature'),
+            ATTR_MODE: payload.get('mode'),
+            ATTR_BATTERY_LOW: payload.get('battery_low')
 
         }
         self._call_callback(EVENT_THERMOSTAT_UPDATE, payload)

@@ -54,3 +54,9 @@ MAX_TEMPERATURE = 30.5
 EVENT_THERMOSTAT_UPDATE = 'thermostat_update'
 EVENT_DEVICE_PAIRED = 'device_paired'
 EVENT_DEVICE_REPAIRED = 'device_repaired'
+
+ATTR_DEVICE_ID = 'device_id'
+ATTR_DESIRED_TEMPERATURE = 'desired_temperature'
+ATTR_MEASURED_TEMPERATURE = 'measured_temperature'
+ATTR_MODE = 'mode'
+ATTR_BATTERY_LOW = 'battery_low'

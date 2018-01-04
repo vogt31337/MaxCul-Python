@@ -22,7 +22,13 @@ from maxcul._const import (
     # Thermostat modes
     MODE_AUTO, MODE_BOOST, MODE_MANUAL, MODE_TEMPORARY,
     # Temperature constants
-    MIN_TEMPERATURE, MAX_TEMPERATURE
+    MIN_TEMPERATURE, MAX_TEMPERATURE,
+    # Attributes of payloads
+    ATTR_DEVICE_ID,
+    ATTR_DESIRED_TEMPERATURE,
+    ATTR_MEASURED_TEMPERATURE,
+    ATTR_MODE,
+    ATTR_BATTERY_LOW,
 )
 from maxcul._exceptions import (
     MoritzError, UnknownMessageError, LengthNotMatchingError, MissingPayloadParameterError
@@ -33,4 +39,4 @@ from maxcul._exceptions import (
 # custom imports
 
 # local constants
-__version__ = "0.1.0"
+__version__ = "0.1.1"
