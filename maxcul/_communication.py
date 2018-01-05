@@ -159,7 +159,7 @@ class MaxConnection(threading.Thread):
 
     def _resend_message(self):
         now = int(time.monotonic())
-        for counter, (when, attempt, msg) in self._outstanding_acks.items():
+        for counter, (when, attempt, msg) in self._outstanding_acks.copy().items():
             if when + BACKOFF_INTERVAL < now and attempt == MAX_ATTEMPTS:
                 del self._outstanding_acks[counter]
                 LOGGER.warn("Did not receive an ACK for message %s", msg)
