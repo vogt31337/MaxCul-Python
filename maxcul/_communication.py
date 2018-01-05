@@ -136,7 +136,7 @@ class MaxConnection(threading.Thread):
             pass
         except Exception as err:
             LOGGER.error(
-                "Exception '%s' was raised while parsing message '%s'. Please consider reporting this as a bug.",
+                "Exception <%s> was raised while parsing message '%s'. Please consider reporting this as a bug.",
                 err,
                 received_msg)
 
@@ -148,7 +148,7 @@ class MaxConnection(threading.Thread):
             return True
         except Exception as err:
             LOGGER.error(
-                "Exception '%s' was raised while encoding message %s. Please consider reporting this as a bug.",
+                "Exception <%s> was raised while encoding message %s. Please consider reporting this as a bug.",
                 err,
                 msg)
             return False

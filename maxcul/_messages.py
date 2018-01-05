@@ -171,6 +171,16 @@ class AckMessage(MoritzMessage):
            Occasionally if the communication is ongoing, this might get lost.
            So don't rely on it but check state afterwards instead"""
     state = ''
+    # fields for a thermostat state
+    mode = None
+    dstsetting = None
+    langateway = None
+    is_locked = None
+    rferror = None
+    battery_low = None
+    desired_temperature = None
+    measured_temperature = None
+    valve_position = None
 
     @staticmethod
     def decode_payload(payload):
