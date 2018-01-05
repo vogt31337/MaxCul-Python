@@ -39,4 +39,4 @@ from maxcul._exceptions import (
 # custom imports
 
 # local constants
-__version__ = "0.1.2"
+__version__ = "0.1.3"
