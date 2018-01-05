@@ -27,20 +27,24 @@ from maxcul._const import *
 
 class MoritzMessage(object):
     """Represents (de)coded message as seen on Moritz Wire"""
-    FIELDS = dict(counter = 0, flag = 0, sender_id = 0,
+    FIELDS = dict(counter = 0, sender_id = 0,
                   receiver_id = 0, group_id = 0)
 
     def __init__(self, **kwargs):
-        fields = {**MoritzMessage.FIELDS, **self.FIELDS}
+        fields = self.__class__.__dict__.get('FIELDS', dict())
+        fields.update(MoritzMessage.FIELDS)
         for key, default_value in fields.items():
             self.__dict__[key] = kwargs.get(key, default_value)
-        self.payload = ''
+        self._flag = kwargs.get('flag', 0)
 
     @property
-    def decoded_payload(self):
+    def flag(self):
+        return self._flag
+
+    @staticmethod
+    def decode_payload(payload):
         raise NotImplementedError()
 
-    @property
     def is_broadcast(self):
         return self.receiver_id == 0
 
@@ -78,37 +82,40 @@ class MoritzMessage(object):
         except KeyError:
             raise UnknownMessageError("Unknown message with id %x found" % msgtype)
 
-        message = message_class()
-        message.counter = counter
-        message.flag = flag
-        message.group_id = group_id
-        message.sender_id = sender_id
-        message.receiver_id = receiver_id
-        message.payload = payload
+        attributes = dict(
+            counter=counter,
+            flag=flag,
+            group_id=group_id,
+            sender_id=sender_id,
+            receiver_id=receiver_id
+        )
+        attributes.update(message_class.decode_payload(payload))
 
-        return message
+        return message_class(**attributes)
 
-    def encode_message(self, payload={}):
+    def encode_message(self):
         """Prepare message to be sent on wire"""
 
         msg_ids = dict((v, k) for k, v in MORITZ_MESSAGE_IDS.items())
         msg_id = msg_ids[self.__class__]
 
         message = ""
-        if hasattr(self, 'encode_payload'):
-            self.payload = self.encode_payload(payload)
-        if hasattr(self, 'encode_flag'):
-            self.flag = self.encode_flag()
         for (var, length) in (
                 (self.counter, 2), (self.flag, 2), (msg_id, 2), (self.sender_id, 6), (self.receiver_id, 6),
                 (self.group_id, 2)):
             content = "%X".upper() % var
             message += content.zfill(length)
-        if self.payload:
-            message += self.payload
+
+        payload = self.encode_payload()
+        if payload:
+            message += payload
+
         length = "%X".upper() % int(len(message) / 2)
         message = "Zs" + length.zfill(2) + message
         return message
+
+    def encode_payload(self):
+        return None
 
     def respond_with(self, klass, **kwargs):
         resp_params = dict(counter = self.counter + 1,
@@ -127,19 +134,17 @@ class MoritzMessage(object):
 class PairPingMessage(MoritzMessage):
     """Thermostats send this request on long boost keypress"""
     FIELDS = dict(firmware_version = 0, device_type = None,
-                  selftest_result = None, device_serial = None,
-                  pairmode = 'pair' )
+                  selftest_result = None, device_serial = None)
 
-    @property
-    def decoded_payload(self):
-        firmware_version, device_type, selftest_result = struct.unpack(">bBB", bytearray.fromhex(self.payload[:6]))
-        device_serial = bytearray.fromhex(self.payload[6:]).decode()
+    @staticmethod
+    def decode_payload(payload):
+        firmware_version, device_type, selftest_result = struct.unpack(">bBB", bytearray.fromhex(payload[:6]))
+        device_serial = bytearray.fromhex(payload[6:]).decode()
         result = {
             'firmware_version': "V%i.%i" % (firmware_version / 0x10, firmware_version % 0x10),
             'device_type': DEVICE_TYPES[device_type],
             'selftest_result': selftest_result,
             'device_serial': device_serial,
-            'pairmode': 'pair' if self.is_broadcast else 're-pair'
         }
         return result
 
@@ -148,13 +153,13 @@ class PairPongMessage(MoritzMessage):
     """Awaited after PairPingMessage is sent by component"""
     FIELDS = dict(devicetype = 'Cube')
 
-    @property
-    def decoded_payload(self):
-        return {'devicetype': DEVICE_TYPES[int(self.payload)]}
+    @staticmethod
+    def decode_payload(payload):
+        return {'devicetype': DEVICE_TYPES[int(payload)]}
 
 
-    def encode_payload(self, payload):
-        return str(DEVICE_TYPES_BY_NAME[payload['devicetype']]).zfill(2)
+    def encode_payload(self):
+        return str(DEVICE_TYPES_BY_NAME[self.devicetype]).zfill(2)
 
 
 class AckMessage(MoritzMessage):
@@ -163,55 +168,58 @@ class AckMessage(MoritzMessage):
 	   So don't rely on it but check state afterwards instead"""
     FIELDS = dict(state = '')
 
-    @property
-    def decoded_payload(self):
+    @staticmethod
+    def decode_payload(payload):
         result = {}
-        if self.payload.startswith("01"):
+        if payload.startswith("01"):
             result["state"] = "ok"
-        elif self.payload.startswith("81"):
+        elif payload.startswith("81"):
             result["state"] = "invalid_command"
-        if len(self.payload) == 8:
+        elif payload.startswith("00"):
+            result["state"] = "ignore"
+        if len(payload) == 8:
             # FIXME: temporarily accepting the fact that we only handle Thermostat results
-            result.update(ThermostatStateMessage.decode_status(self.payload[2:]))
+            result.update(ThermostatStateMessage.decode_status(payload[2:]))
         return result
 
-    def encode_flag(self):
+    @property
+    def flag(self):
         return 0x4 if self.group_id else 0x0
-
-    def encode_payload(self, payload=None):
-        return payload
 
 
 class TimeInformationMessage(MoritzMessage):
     """Current time is either requested or encoded. Request simply is empty payload"""
-    FIELDS = dict(year = 0, month = 0, day = 0,
-                  hour = 0, minute = 0, second = 0)
+    FIELDS = dict(datetime=None)
 
-    @property
-    def decoded_payload(self):
-        (years_since_200, day, hour, month_minute, month_sec) = struct.unpack(">BBBBB",
-                                                                              bytearray.fromhex(self.payload[:12]))
-        return datetime(
-            year=years_since_200 + 2000,
+    @staticmethod
+    def decode_payload(payload):
+        if len(payload) == 0:
+            return {'datetime': None}
+        (years_since_2000, day, hour, month_minute, month_sec) = struct.unpack(">BBBBB",
+                                                                              bytearray.fromhex(payload[:12]))
+        d = datetime(
+            year=years_since_2000 + 2000,
             minute=month_minute & 0x3F,
-            month=((month_minute >> 4) & 0x0C) | ((month_sec >> 6) & 0x03),
+            month=((month_minute & 0xC0) >> 4) | ((month_sec & 0xC0) >> 6),
             day=day,
-            hour=hour,
+            hour=hour & 0x3F,
             second=month_sec & 0x3F
         )
+        return {'datetime': d}
 
-    def encode_flag(self):
-        return 0x0A if not self.payload else 0x04
+    @property
+    def flag(self):
+        return 0x0A if self.datetime is None else 0x04
 
-    def encode_payload(self, payload=None):
+    def encode_payload(self):
         # may contain empty payload to ask for timeinformation
-        if payload is None:
+        if self.datetime is None:
             return ""
-        encoded_payload = str("%X" % (payload.year - 2000)).zfill(2)
-        encoded_payload += str("%X" % payload.day).zfill(2)
-        encoded_payload += str("%X" % payload.hour).zfill(2)
-        encoded_payload += str("%X" % (payload.minute | ((payload.month & 0x0C) << 4))).zfill(2)
-        encoded_payload += str("%X" % (payload.second | ((payload.month & 0x03) << 6))).zfill(2)
+        encoded_payload = str("%X" % (self.datetime.year - 2000)).zfill(2)
+        encoded_payload += str("%X" % self.datetime.day).zfill(2)
+        encoded_payload += str("%X" % self.datetime.hour).zfill(2)
+        encoded_payload += str("%X" % (self.datetime.minute | ((self.datetime.month & 0x0C) << 4))).zfill(2)
+        encoded_payload += str("%X" % (self.datetime.second | ((self.datetime.month & 0x03) << 6))).zfill(2)
         return encoded_payload
 
 
@@ -225,148 +233,178 @@ class ConfigTemperaturesMessage(MoritzMessage):
                   min_Temperature = 0, measurement_Offset = 0,
                   window_open_Temperature = 0, window_Open_Duration = 0)
 
-    @property
-    def decoded_payload(self):
-        pass
+    @staticmethod
+    def decode_payload(payload):
+        (comfort, eco, max, min, offset, window_Open_Temperature, window_Open_Duration) = struct.unpack(">BBBBBBB", bytearray.fromhex(self.payload[:14]))
 
-    def encode_flag(self):
+        result = {
+            'comfort_Temperature': comfort / 2,
+            'eco_Temperature': eco / 2,
+            'max_Temperature': max / 2,
+            'min_Temperature': min / 2,
+            'measurement_Offset': (offset / 2) - 3.5,
+            'window_Open_Temperature': window_Open_Temperature / 2,
+            'window_Open_Duration': window_Open_Duration * 5
+        }
+
+        return result
+
+
+    @property
+    def flag(self):
         return 0x4 if self.group_id else 0x0
 
-    def encode_payload(self, payload):
-        if "comfort_Temperature" not in payload:
+    def encode_payload(self):
+        if self.comfort_Temperature is None:
             raise MissingPayloadParameterError("Missing comfort_Temperature in payload")
-        if "eco_Temperature" not in payload:
+        if self.eco_Temperature is None:
             raise MissingPayloadParameterError("Missing eco_Temperature in payload")
-        if "max_Temperature" not in payload:
+        if self.max_Temperature is None:
             raise MissingPayloadParameterError("Missing max_Temperature in payload")
-        if "min_Temperature" not in payload:
+        if self.min_Temperature is None:
             raise MissingPayloadParameterError("Missing min_Temperature in payload")
-        if "measurement_Offset" not in payload:
+        if self.measurement_Offset is None:
             raise MissingPayloadParameterError("Missing measurement_Offset in payload")
-        if "window_Open_Temperatur" not in payload:
+        if self.window_Open_Temperatur is None:
             raise MissingPayloadParameterError("Missing window_Open_Temperatur in payload")
-        if "window_Open_Duration" not in payload:
+        if self.window_Open_Duration is None:
             raise MissingPayloadParameterError("Missing window_Open_Duration in payload")
 
-        comfort_Temperature = "%0.2X" % int(payload['comfort_Temperature']*2)
-        eco_Temperature = "%0.2X" % int(payload['eco_Temperature']*2)
-        max_Temperature = "%0.2X" % int(payload['max_Temperature']*2)
-        min_Temperature = "%0.2X" % int(payload['min_Temperature']*2)
-        measurement_Offset = "%0.2X" % int((payload['measurement_Offset'] + 3.5)*2)
-        window_Open_Temperatur = "%0.2X" % int(payload['window_Open_Temperatur']*2)
-        window_Open_Duration = "%0.2X" % int(payload['window_Open_Duration']/5)
+        comfort_Temperature = "%0.2X" % int(self.comfort_Temperature*2)
+        eco_Temperature = "%0.2X" % int(self.eco_Temperature*2)
+        max_Temperature = "%0.2X" % int(self.max_Temperature*2)
+        min_Temperature = "%0.2X" % int(self.min_Temperature*2)
+        measurement_Offset = "%0.2X" % int((self.measurement_Offset + 3.5)*2)
+        window_Open_Temperature = "%0.2X" % int(self.window_Open_Temperature*2)
+        window_Open_Duration = "%0.2X" % int(self.window_Open_Duration/5)
 
-        content = comfort_Temperature + eco_Temperature + max_Temperature + min_Temperature + measurement_Offset + window_Open_Temperatur +window_Open_Duration
+        content = comfort_Temperature + eco_Temperature + max_Temperature + min_Temperature + measurement_Offset + window_Open_Temperature +window_Open_Duration
         return content
 
 
 
 class ConfigValveMessage(MoritzMessage):
     """Sets valve config"""
+    FIELDS = dict(boost_duration=None,boost_valve_position=None,
+                  decalc_day=None,decalc_hour=None,
+                  max_valve_position=None,valve_offset=None)
 
-    @property
-    def decoded_payload(self):
+    @staticmethod
+    def decode_payload(payload):
         pass
 
-    def encode_flag(self):
+    @property
+    def flag(self):
         return 0x4 if self.group_id else 0x0
 
-    def encode_payload(self, payload):
-        if "boost_duration" not in payload:
+    def encode_payload(self):
+        if self.boost_duration is None:
             raise MissingPayloadParameterError("Missing boost duration in payload")
-        if "boost_valve_position" not in payload:
+        if self.boost_valve_position is None:
             raise MissingPayloadParameterError("Missing boost valve position in payload")
-        if "decalc_day" not in payload:
+        if self.decalc_day is None:
             raise MissingPayloadParameterError("Missing decalc day in payload")
-        if "decalc_hour" not in payload:
+        if self.decalc_hour is None:
             raise MissingPayloadParameterError("Missing decalc hour in payload")
-        if "max_valve_position" not in payload:
+        if self.max_valve_position is None:
             raise MissingPayloadParameterError("Missing max valve position in payload")
-        if "valve_offset" not in payload:
+        if self.valve_offset is None:
             raise MissingPayloadParameterError("Missing valve offset in payload")
 
-        boost = "%0.2X" % ((BOOST_DURATION[payload["boost_duration"]] << 5) | int(payload["boost_valve_position"]/5))
-        decalc = "%0.2X" % ((DECALC_DAYS[payload["decalc_day"]] << 5) | payload["decalc_hour"])
-        max_valve_position = "%0.2X" % int(payload["max_valve_position"]*255/100)
-        valve_offset = "%0.2X" % int(payload["valve_offset"]*255/100)
+        boost = "%0.2X" % ((BOOST_DURATION[self.boost_duration] << 5) | int(self.boost_valve_position/5))
+        decalc = "%0.2X" % ((DECALC_DAYS[self.decalc_day] << 5) | self.decalc_hour)
+        max_valve_position = "%0.2X" % int(self.max_valve_position*255/100)
+        valve_offset = "%0.2X" % int(self.valve_offset*255/100)
         content = boost + decalc + max_valve_position + valve_offset
         return content
 
 
 class AddLinkPartnerMessage(MoritzMessage):
 
-    @property
-    def decoded_payload(self):
+    FIELDS = dict(assocDevice=None,assocDeviceType=None)
+
+    @staticmethod
+    def decode_payload(payload):
         pass
 
-    def encode_flag(self):
+    @property
+    def flag(self):
         return 0x4 if self.group_id else 0x0
 
-    def encode_payload(self, payload):
-        if "assocDevice" not in payload:
+    def encode_payload(self):
+        if self.assocDevice is None:
             raise MissingPayloadParameterError("Missing assocDevice in payload")
-        if "assocDeviceType" not in payload:
+        if self.assocDeviceType is None:
             raise MissingPayloadParameterError("Missing assocDeviceType in payload")
 
-        assocDevice = "%0.6X" % int(payload["assocDevice"])
-        assocDeviceType = "%0.2X" % list(DEVICE_TYPES.keys())[list(DEVICE_TYPES.values()).index(payload["assocDeviceType"])]
+        assocDevice = "%0.6X" % int(self.assocDevice)
+        assocDeviceType = "%0.2X" % list(DEVICE_TYPES.keys())[list(DEVICE_TYPES.values()).index(self.assocDeviceType)]
         return assocDevice + assocDeviceType
 
 class RemoveLinkPartnerMessage(MoritzMessage):
 
-    @property
-    def decoded_payload(self):
+    FIELDS = dict(assocDevice=None,assocDeviceType=None)
+
+    @staticmethod
+    def decode_payload(payload):
         pass
 
-    def encode_flag(self):
+    @property
+    def flag(self):
         return 0x4 if self.group_id else 0x0
 
-    def encode_payload(self, payload):
-        if "assocDevice" not in payload:
+    def encode_payload(self):
+        if self.assocDevice is None:
             raise MissingPayloadParameterError("Missing assocDevice in payload")
-        if "assocDeviceType" not in payload:
+        if self.assocDeviceType is None:
             raise MissingPayloadParameterError("Missing assocDeviceType in payload")
 
-        assocDevice = payload["assocDevice"]
-        assocDeviceType = "%0.2X" % DEVICE_TYPES[payload["assocDeviceType"]]
+        assocDevice = self.assocDevice
+        assocDeviceType = "%0.2X" % DEVICE_TYPES[self.assocDeviceType]
         return assocDevice + assocDeviceType
 
 
 class SetGroupIdMessage(MoritzMessage):
 
-    @property
-    def decoded_payload(self):
-        pass
+    FIELDS = dict(new_group_id=None)
 
-    def encode_flag(self):
+    @staticmethod
+    def decode_payload(payload):
+        return { 'group_id': int(payload[0], 16)}
+
+    @property
+    def flag(self):
         return 0x4 if self.group_id else 0x0
 
-    def encode_payload(self, payload):
-        if "group_id" not in payload:
+    def encode_payload(self):
+        if self.new_group_id is None:
             raise MissingPayloadParameterError("Missing group id in payload")
 
-        groupId = "%0.2X" % payload["group_id"]
+        groupId = "%0.2X" % self.new_group_id
         return groupId
 
 
 
 class RemoveGroupIdMessage(MoritzMessage):
 
-    @property
-    def decoded_payload(self):
+    @staticmethod
+    def decode_payload(payload):
         pass
 
-    def encode_flag(self):
+    @property
+    def flag(self):
         return 0x4 if self.group_id else 0x0
 
-    def encode_payload(self, payload):
+    def encode_payload(self):
         overrideGroupId = "00"
         return overrideGroupId
 
 
 
 class ShutterContactStateMessage(MoritzMessage):
-    """Non-reculary sent by Thermostats to report when valve was moved or command received."""
+
+    FIELDS = dict(state=None,unkbits=None,
+                  rferror=None,battery_low=None)
 
     @staticmethod
     def decode_status(payload):
@@ -383,42 +421,45 @@ class ShutterContactStateMessage(MoritzMessage):
         }
         return result
 
-    @property
-    def decoded_payload(self):
-        result = ShutterContactStateMessage.decode_status(self.payload)
+    @staticmethod
+    def decode_payload(payload):
+        result = ShutterContactStateMessage.decode_status(payload)
         return result
 
 class SetTemperatureMessage(MoritzMessage):
     """Sets temperature for manual mode as well as mode switch between manual, auto and boost"""
 
-    @property
-    def decoded_payload(self):
-        payload = struct.unpack(">B", bytearray.fromhex(self.payload[0:4]))
+    FIELDS = dict(desired_temperature = None, mode = None)
+
+    @staticmethod
+    def decode_payload(payload):
+        payload = struct.unpack(">B", bytearray.fromhex(payload[0:4]))
         return {
             'desired_temperature': ((payload[0] & 0x3F) / 2.0),
             'mode': MODE_IDS[payload[0] >> 6]
         }
 
-    def encode_flag(self):
+    @property
+    def flag(self):
         return 0x4 if self.group_id else 0x0
 
-    def encode_payload(self, payload):
-        if "desired_temperature" not in payload:
+    def encode_payload(self):
+        if self.desired_temperature is None:
             raise MissingPayloadParameterError("Missing desired_temperature in payload")
-        if "mode" not in payload:
+        if self.mode is None:
             raise MissingPayloadParameterError("Missing mode in payload")
 
-        if payload['desired_temperature'] > 30.5:
+        if self.desired_temperature > 30.5:
             desired_temperature = 30.5  # "ON"
-        elif payload['desired_temperature'] < 4.5:
+        elif self.desired_temperature < 4.5:
             desired_temperature = 4.5  # "OFF"
         else:
             # always round to nearest 0.5 first
-            desired_temperature = round(payload['desired_temperature'] * 2) / 2.0
+            desired_temperature = round(self.desired_temperature * 2) / 2.0
         int_temperature = int(desired_temperature * 2)
 
         modes = dict((v, k) for (k, v) in MODE_IDS.items())
-        mode = modes[payload['mode']]
+        mode = modes[self.mode]
 
         # TODO: you can add a until time for chort changes
         # from fhem
@@ -430,19 +471,21 @@ class SetTemperatureMessage(MoritzMessage):
 
 class WallThermostatControlMessage(MoritzMessage):
 
+    FIELDS = dict(desired_temperature=None,
+                  temperature=None)
     @staticmethod
     def decode_status(payload):
-        rawTempratures = bin(int(payload, 16))[2:].zfill(16)
+        rawTemperatures = bin(int(payload, 16))[2:].zfill(16)
 
         result = {
-            "desired_temprature": int(rawTempratures[1:8], 2)/2,
-            "temprature": ((int(rawTempratures[0], 2) << 8) + int(rawTempratures[8:], 2))/10
+            "desired_temperature": int(rawTemperatures[1:8], 2)/2,
+            "temperature": ((int(rawTemperatures[0], 2) << 8) + int(rawTemperatures[8:], 2))/10
         }
         return result
 
-    @property
-    def decoded_payload(self):
-        result = WallThermostatControlMessage.decode_status(self.payload)
+    @staticmethod
+    def decode_payload(payload):
+        result = WallThermostatControlMessage.decode_status(payload)
         return result
 
 
@@ -455,11 +498,27 @@ class SetEcoTemperatureMessage(MoritzMessage):
 
 
 class PushButtonStateMessage(MoritzMessage):
-    pass
+
+    FIELDS = dict(state=None,rferror=None,
+                  battery_low=None,is_retransmission=None)
+
+    @staticmethod
+    def decode_payload(payload):
+        return {
+            'state': bool(payload[1] & 0x1),
+            'rferror': bool(payload[0] & 0b100000),
+            'battery_low': bool(payload[0] & 0b1000000),
+            'is_retransmission': bool(payload[0] & 0x50)
+        }
 
 
 class ThermostatStateMessage(MoritzMessage):
     """Non-reculary sent by Thermostats to report when valve was moved or command received."""
+
+    FIELDS = dict(mode=None,dstsetting=None,langateway=None,
+                  is_locked=None,rferror=None,battery_low=None,
+                  desired_temperature=None,measured_temperature=None,
+                  valve_position=None)
 
     @staticmethod
     def decode_status(payload):
@@ -484,11 +543,11 @@ class ThermostatStateMessage(MoritzMessage):
         }
         return result
 
-    @property
-    def decoded_payload(self):
-        result = ThermostatStateMessage.decode_status(self.payload)
-        if len(self.payload) > 6:
-            pending_payload = bytearray.fromhex(self.payload[6:])
+    @staticmethod
+    def decode_payload(payload):
+        result = ThermostatStateMessage.decode_status(payload)
+        if len(payload) > 6:
+            pending_payload = bytearray.fromhex(payload[6:])
             if len(pending_payload) == 3:
                 # TODO handle date string
                 pass
@@ -503,6 +562,11 @@ class ThermostatStateMessage(MoritzMessage):
 class WallThermostatStateMessage(MoritzMessage):
     """Non-reculary sent by Thermostats to report when valve was moved or command received."""
 
+
+    FIELDS = dict(mode=None,dstsetting=None,langateway=None,
+                  is_locked=None,rferror=None,battery_low=None,
+                  desired_temperature=None,display_actual_temperature=None,
+                  temperature=None,until_str=None)
 
     @staticmethod
     def decode_status(payload):
@@ -552,9 +616,9 @@ class WallThermostatStateMessage(MoritzMessage):
         }
         return result
 
-    @property
-    def decoded_payload(self):
-        result = WallThermostatStateMessage.decode_status(self.payload)
+    @staticmethod
+    def decode_payload(payload):
+        result = WallThermostatStateMessage.decode_status(payload)
         return result
 
 
@@ -610,9 +674,11 @@ MORITZ_MESSAGE_IDS = {
     0x30: ShutterContactStateMessage,
 
     0x40: SetTemperatureMessage,
+    #0x41: SetPointTemperature,
     0x42: WallThermostatControlMessage,
     0x43: SetComfortTemperatureMessage,
     0x44: SetEcoTemperatureMessage,
+    #0x45: CurrentTemperatureAndHumidity,
 
     0x50: PushButtonStateMessage,
 
@@ -620,8 +686,11 @@ MORITZ_MESSAGE_IDS = {
 
     0x70: WallThermostatStateMessage,
 
+    #0x80: LockManualControls,
+    #0x81: DaylightSavingTimeMode,
     0x82: SetDisplayActualTemperatureMessage,
 
     0xF1: WakeUpMessage,
     0xF0: ResetMessage,
+    #0xFF: TestMessage,
 }
