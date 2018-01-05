@@ -58,6 +58,7 @@ DEFAULT_PAIRING_TIMOUT = 30
 BACKOFF_INTERVAL = 5
 MAX_ATTEMPTS = 5
 
+
 class MaxConnection(threading.Thread):
     """High level message processing"""
 
@@ -115,7 +116,9 @@ class MaxConnection(threading.Thread):
 
     def wakeup(self, receiver_id):
         LOGGER.debug("Waking device %d", receiver_id)
-        msg = WakeUpMessage(counter = self._next_counter(), receiver_id = receiver_id)
+        msg = WakeUpMessage(
+            counter=self._next_counter(),
+            receiver_id=receiver_id)
         if self._send_message(msg):
             self._await_ack(msg)
 
@@ -134,7 +137,8 @@ class MaxConnection(threading.Thread):
         except Exception as err:
             LOGGER.error(
                 "Exception '%s' was raised while parsing message '%s'. Please consider reporting this as a bug.",
-                err, received_msg)
+                err,
+                received_msg)
 
     def _send_message(self, msg):
         LOGGER.debug("Sending message %s", msg)
@@ -145,7 +149,8 @@ class MaxConnection(threading.Thread):
         except Exception as err:
             LOGGER.error(
                 "Exception '%s' was raised while encoding message %s. Please consider reporting this as a bug.",
-                err, msg)
+                err,
+                msg)
             return False
 
     def _await_ack(self, msg):
@@ -155,7 +160,7 @@ class MaxConnection(threading.Thread):
     def _resend_message(self):
         now = int(time.monotonic())
         for counter, (when, attempt, msg) in self._outstanding_acks.items():
-            if when + BACKOFF_INTERVAL < now && attempt == MAX_ATTEMPTS:
+            if when + BACKOFF_INTERVAL < now and attempt == MAX_ATTEMPTS:
                 del self._outstanding_acks[counter]
                 LOGGER.warn("Did not receive an ACK for message %s", msg)
                 continue
@@ -208,7 +213,8 @@ class MaxConnection(threading.Thread):
             if msg.receiver_id == 0x0:
                 # pairing after factory reset
                 if not self._pairing_enabled.is_set():
-                    LOGGER.info("Pairing requested but pairing disabled, not pairing to new device")
+                    LOGGER.info(
+                        "Pairing requested but pairing disabled, not pairing to new device")
                     return
                 if self._send_pong(msg):
                     self._call_callback(
@@ -243,7 +249,7 @@ class MaxConnection(threading.Thread):
         elif isinstance(msg, AckMessage):
             if msg.counter in self._outstanding_acks:
                 del self._outstanding_acks[msg.counter]
-            if  msg.state == "ok":
+            if msg.state == "ok":
                 self._propagate_thermostat_change(msg)
 
         elif isinstance(msg, ShutterContactStateMessage, WallThermostatStateMessage, SetTemperatureMessage, WallThermostatControlMessage):
@@ -260,7 +266,7 @@ class MaxConnection(threading.Thread):
             ATTR_MEASURED_TEMPERATURE: msg.measured_temperature,
             ATTR_DESIRED_TEMPERATURE: msg.desired_temperature,
             ATTR_MODE: msg.mode,
-            ATTR_BATTERY_LOW: msg.battery_low 
+            ATTR_BATTERY_LOW: msg.battery_low
 
         }
         self._call_callback(EVENT_THERMOSTAT_UPDATE, payload)
