@@ -55,6 +55,9 @@ DEFAULT_DEVICE = '/dev/ttyUSB0'
 DEFAULT_BAUDRATE = '38400'
 DEFAULT_PAIRING_TIMOUT = 30
 
+BACKOFF_INTERVAL = 5
+MAX_ATTEMPTS = 5
+
 class MaxConnection(threading.Thread):
     """High level message processing"""
 
@@ -71,6 +74,7 @@ class MaxConnection(threading.Thread):
         self.stop_requested = threading.Event()
         self._pairing_enabled = threading.Event()
         self._paired_devices = paired_devices or []
+        self._outstanding_acks = {}
         self.callback = callback
         self._msg_count = 0
 
@@ -78,6 +82,7 @@ class MaxConnection(threading.Thread):
         self.com_thread.start()
         while not self.stop_requested.is_set():
             self._receive_message()
+            self._resend_message()
             time.sleep(0.3)
 
     def stop(self, timeout=None):
@@ -101,17 +106,18 @@ class MaxConnection(threading.Thread):
         msg = SetTemperatureMessage(
             counter=self._next_counter(),
             sender_id=self.sender_id,
-            receiver_id=receiver_id
+            receiver_id=receiver_id,
+            desired_temperature=float(temperature),
+            mode=mode
         )
-        payload = {
-            'desired_temperature': float(temperature),
-            'mode': mode,
-        }
-        self._send_message(msg, payload)
+        if self._send_message(msg):
+            self._await_ack(msg)
 
     def wakeup(self, receiver_id):
         LOGGER.debug("Waking device %d", receiver_id)
-        self._send_message(WakeUpMessage(counter = self._next_counter(), receiver_id = receiver_id), None)
+        msg = WakeUpMessage(counter = self._next_counter(), receiver_id = receiver_id)
+        if self._send_message(msg):
+            self._await_ack(msg)
 
     def _next_counter(self):
         self._msg_count += 1
@@ -125,44 +131,66 @@ class MaxConnection(threading.Thread):
             self._handle_message(message, signal_strength)
         except queue.Empty:
             pass
-        except MoritzError as err:
+        except Exception as err:
             LOGGER.error(
-                "Message parsing failed, ignoring message '%s'. Reason: %s",
-                received_msg, err)
+                "Exception '%s' was raised while parsing message '%s'. Please consider reporting this as a bug.",
+                err, received_msg)
 
-    def _send_message(self, msg, payload):
-        LOGGER.debug("Sending message %s with payload %s", msg, payload)
+    def _send_message(self, msg):
+        LOGGER.debug("Sending message %s", msg)
         try:
-            raw_message = msg.encode_message(payload)
+            raw_message = msg.encode_message()
             self.com_thread.enqueue_command(raw_message)
-        except MoritzError as err:
+            return True
+        except Exception as err:
             LOGGER.error(
-                "Message sending failed, ignoring message '%s'. Reason: %s",
-                msg, err)
+                "Exception '%s' was raised while encoding message %s. Please consider reporting this as a bug.",
+                err, msg)
+            return False
+
+    def _await_ack(self, msg):
+        now = int(time.monotonic())
+        self._outstanding_acks.update(msg.counter, (now, 1, msg))
+
+    def _resend_message(self):
+        now = int(time.monotonic())
+        for counter, (when, attempt, msg) in self._outstanding_acks.items():
+            if when + BACKOFF_INTERVAL < now && attempt == MAX_ATTEMPTS:
+                del self._outstanding_acks[counter]
+                LOGGER.warn("Did not receive an ACK for message %s", msg)
+                continue
+            if when + BACKOFF_INTERVAL < now:
+                self._send_message(msg)
+                self._outstanding_acks.update(counter, (now, attempt + 1, msg))
 
     def _send_ack(self, msg):
         ack_msg = msg.respond_with(
             AckMessage,
             counter=msg.counter,
             sender_id=self.sender_id)
-        self._send_message(ack_msg, "00")
+        self._send_message(ack_msg)
 
     def _send_timeinformation(self, msg):
         resp_msg = msg.respond_with(
             TimeInformationMessage,
             counter=self._next_counter(),
-            sender_id=self.sender_id)
-        self._send_message(resp_msg, datetime.now())
+            sender_id=self.sender_id,
+            datetime=datetime.now()
+        )
+        self._send_message(resp_msg)
 
     def _send_pong(self, msg):
         resp_msg = msg.respond_with(
             PairPongMessage,
             counter=self._next_counter(),
-            sender_id=self.sender_id)
+            sender_id=self.sender_id,
+            devicetype='Cube'
+        )
         if self.com_thread.has_send_budget:
-            self._send_message(resp_msg, {"devicetype": "Cube"})
-            self._paired_devices.append(msg.sender_id)
-            return True
+            if self._send_message(resp_msg):
+                self._paired_devices.append(msg.sender_id)
+                return True
+            return False
         LOGGER.info(
             "NOT responding to pair send budget is insufficient to be on time")
         return False
@@ -173,7 +201,7 @@ class MaxConnection(threading.Thread):
             # discard messages not addressed to us
             return
 
-        LOGGER.debug("Received message %s %s (%d)", msg, msg.decoded_payload, signal_strenth)
+        LOGGER.debug("Received message %s (%d)", msg, signal_strenth)
 
         if isinstance(msg, PairPingMessage):
             # Some peer wants to pair. Let's see...
@@ -204,7 +232,7 @@ class MaxConnection(threading.Thread):
             return
 
         if isinstance(msg, TimeInformationMessage):
-            if not msg.payload:
+            if not msg.datetime:
                 # time information requested
                 self._send_timeinformation(msg)
 
@@ -213,7 +241,9 @@ class MaxConnection(threading.Thread):
             self._propagate_thermostat_change(msg)
 
         elif isinstance(msg, AckMessage):
-            if "state" in msg.decoded_payload and msg.decoded_payload["state"] == "ok":
+            if msg.counter in self._outstanding_acks:
+                del self._outstanding_acks[msg.counter]
+            if  msg.state == "ok":
                 self._propagate_thermostat_change(msg)
 
         elif isinstance(msg, ShutterContactStateMessage, WallThermostatStateMessage, SetTemperatureMessage, WallThermostatControlMessage):
@@ -225,13 +255,12 @@ class MaxConnection(threading.Thread):
                 msg.__class__.__name__, msg)
 
     def _propagate_thermostat_change(self, msg):
-        payload = msg.decoded_payload
         payload = {
             ATTR_DEVICE_ID: msg.sender_id,
-            ATTR_MEASURED_TEMPERATURE: payload.get('measured_temperature'),
-            ATTR_DESIRED_TEMPERATURE: payload.get('desired_temperature'),
-            ATTR_MODE: payload.get('mode'),
-            ATTR_BATTERY_LOW: payload.get('battery_low')
+            ATTR_MEASURED_TEMPERATURE: msg.measured_temperature,
+            ATTR_DESIRED_TEMPERATURE: msg.desired_temperature,
+            ATTR_MODE: msg.mode,
+            ATTR_BATTERY_LOW: msg.battery_low 
 
         }
         self._call_callback(EVENT_THERMOSTAT_UPDATE, payload)
