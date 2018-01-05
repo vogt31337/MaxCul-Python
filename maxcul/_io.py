@@ -58,6 +58,8 @@ class CulIoThread(threading.Thread):
         self._send_pending_message()
         if self._remaining_budget == 0:
             self._writeline(COMMAND_REQUEST_BUDGET)
+            while self._remaining_budget == 0:
+                self._receive_message()
         time.sleep(0.2)
 
     def _receive_message(self):
