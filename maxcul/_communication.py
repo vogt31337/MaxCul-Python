@@ -155,7 +155,7 @@ class MaxConnection(threading.Thread):
 
     def _await_ack(self, msg):
         now = int(time.monotonic())
-        self._outstanding_acks.update(msg.counter, (now, 1, msg))
+        self._outstanding_acks[msg.counter] = (now, 1, msg)
 
     def _resend_message(self):
         now = int(time.monotonic())
@@ -166,7 +166,7 @@ class MaxConnection(threading.Thread):
                 continue
             if when + BACKOFF_INTERVAL < now:
                 self._send_message(msg)
-                self._outstanding_acks.update(counter, (now, attempt + 1, msg))
+                self._outstanding_acks[counter] = (now, attempt + 1, msg)
 
     def _send_ack(self, msg):
         ack_msg = msg.respond_with(
