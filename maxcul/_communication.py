@@ -55,7 +55,7 @@ DEFAULT_DEVICE = '/dev/ttyUSB0'
 DEFAULT_BAUDRATE = '38400'
 DEFAULT_PAIRING_TIMOUT = 30
 
-BACKOFF_INTERVAL = 5
+BACKOFF_INTERVAL = 10
 MAX_ATTEMPTS = 5
 
 
@@ -169,15 +169,16 @@ class MaxConnection(threading.Thread):
         now = int(time.monotonic())
         for counter, (when, attempt,
                       msg) in self._outstanding_acks.copy().items():
-            if when + BACKOFF_INTERVAL < now and attempt == MAX_ATTEMPTS:
+            if when + BACKOFF_INTERVAL * attempt > now:
+                continue
+            if attempt == MAX_ATTEMPTS:
                 del self._outstanding_acks[counter]
                 LOGGER.warn("Did not receive an ACK for message %s", msg)
                 continue
-            if when + BACKOFF_INTERVAL < now:
-                if self._send_message(msg):
-                    self._outstanding_acks[counter] = (now, attempt + 1, msg)
-                else:
-                    del self._outstanding_acks[counter]
+            if self._send_message(msg):
+                self._outstanding_acks[counter] = (now, attempt + 1, msg)
+            else:
+                del self._outstanding_acks[counter]
 
     def _send_ack(self, msg):
         ack_msg = msg.respond_with(

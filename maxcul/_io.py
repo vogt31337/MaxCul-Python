@@ -13,6 +13,8 @@ READLINE_TIMEOUT = 0.5
 
 COMMAND_REQUEST_BUDGET = 'X'
 
+MIN_REQUIRED_BUDGET = 1000
+
 
 class CulIoThread(threading.Thread):
     """Low-level serial communication thread base"""
@@ -60,6 +62,10 @@ class CulIoThread(threading.Thread):
             self._writeline(COMMAND_REQUEST_BUDGET)
             while self._remaining_budget == 0:
                 self._receive_message()
+        if self._remaining_budget < MIN_REQUIRED_BUDGET:
+            missing = MIN_REQUIRED_BUDGET - self._remaining_budget
+            time.sleep(missing / 10)
+            self._writeline(COMMAND_REQUEST_BUDGET)
         time.sleep(0.2)
 
     def _receive_message(self):
