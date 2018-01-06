@@ -4,7 +4,7 @@ from collections import deque
 import threading
 import time
 import logging
-from serial import Serial
+from serial import Serial, SerialException
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,20 +87,23 @@ class CulIoThread(threading.Thread):
             pass
 
     def _init_cul(self):
-        for _ in range(10):
-            self._open_serial_device()
-            if self._com_port is not None:
-                break
+        if not self._open_serial_device():
+            self._stop_requested.set()
+            return
 
         if self._com_port is None:
             LOGGER.error("No version from CUL, cannot communicate")
             self._stop_requested.set()
 
     def _open_serial_device(self):
-        self._com_port = Serial(
-            self._device_path,
-            self._baudrate,
-            timeout=READLINE_TIMEOUT)
+        try:
+            self._com_port = Serial(
+                self._device_path,
+                self._baudrate,
+                timeout=READLINE_TIMEOUT)
+        except SerialException as err:
+            LOGGER.error("Unable to open serial device <%s>", err)
+            return False
         # was required for my nanoCUL
         time.sleep(2)
         # get CUL FW version
@@ -116,7 +119,7 @@ class CulIoThread(threading.Thread):
         if self._cul_version is None:
             self._com_port.close()
             self._com_port = None
-            return
+            return False
         # enable reporting of message strength
         self._writeline("X21")
         time.sleep(0.3)
@@ -126,17 +129,49 @@ class CulIoThread(threading.Thread):
         # disable FHT mode by setting station to 0000
         self._writeline("T01")
         time.sleep(0.3)
+        return True
+
+    def _reopen_serial_device(self):
+        if self._com_port:
+            try:
+                self._com_port.close()
+            except Exception:
+                pass
+            self._com_port = None
+        self._remaining_budget = 0
+
+        for timeout in [5, 10, 20, 40]:
+            if self._open_serial_device():
+                return True
+            time.sleep(timeout)
+        return False
 
     def _writeline(self, command):
-        LOGGER.debug("Writing command %s", command)
         """Sends given command to CUL. Invalidates has_send_budget if command starts with Zs"""
+        LOGGER.debug("Writing command %s", command)
         if command.startswith("Zs"):
             self._remaining_budget = 0
-        self._com_port.write((command + "\r\n").encode())
+        try:
+            self._com_port.write((command + "\r\n").encode())
+        except SerialException as err:
+            LOGGER.error("Error writing to serial device <%s>. Try reopening it.", err)
+            if self._reopen_serial_device():
+                self._writeline(command)
+            else:
+                LOGGER.error("Unable to reopen serial device, quitting")
+                self._stop_requested.set()
 
     def _readline(self):
-        line = self._com_port.readline()
-        line = line.decode('utf-8')[:-2]
-        if line:
-            return line
-        return None
+        try:
+            line = self._com_port.readline()
+            line = line.decode('utf-8')[:-2]
+            if line:
+                return line
+            return None
+        except SerialException as err:
+            LOGGER.error("Error reading from serial device <%s>. Try reopening it.", err)
+            if self._reopen_serial_device():
+                self._readline()
+            else:
+                LOGGER.error("Unable to reopen serial device, quitting")
+                self._stop_requested.set()
