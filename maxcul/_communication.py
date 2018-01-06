@@ -111,16 +111,20 @@ class MaxConnection(threading.Thread):
             desired_temperature=float(temperature),
             mode=mode
         )
-        if self._send_message(msg):
+        success = self._send_message(msg)
+        if success:
             self._await_ack(msg)
+        return success
 
     def wakeup(self, receiver_id):
         LOGGER.debug("Waking device %d", receiver_id)
         msg = WakeUpMessage(
             counter=self._next_counter(),
             receiver_id=receiver_id)
-        if self._send_message(msg):
+        success = self._send_message(msg)
+        if success:
             self._await_ack(msg)
+        return success
 
     def _next_counter(self):
         self._msg_count += 1
