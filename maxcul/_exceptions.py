@@ -19,27 +19,26 @@
 
 # local constants
 
-class MoritzError(Exception):
-	"""Our base class for all errors"""
 
-	pass
+class MoritzError(Exception):
+    """Our base class for all errors"""
+
+    pass
 
 
 class UnknownMessageError(MoritzError):
-	"""Unhandled message ID received"""
+    """Unhandled message ID received"""
 
-	pass
+    pass
 
 
 class LengthNotMatchingError(MoritzError):
-	"""Message payload length and indicated length differ"""
+    """Message payload length and indicated length differ"""
 
-	pass
+    pass
 
 
 class MissingPayloadParameterError(MoritzError):
-	"""Parameter missing to construct message"""
+    """Parameter missing to construct message"""
 
-	pass
-
-
+    pass

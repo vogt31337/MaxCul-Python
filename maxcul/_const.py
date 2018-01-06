@@ -28,18 +28,18 @@ SHUTTER_STATES = {
 }
 
 DECALC_DAYS = {
-    "Sat" : 0,
-    "Sun" : 1,
-    "Mon" : 2,
-    "Tue" : 3,
-    "Wed" : 4,
-    "Thu" : 5,
-    "Fri" : 6
+    "Sat": 0,
+    "Sun": 1,
+    "Mon": 2,
+    "Tue": 3,
+    "Wed": 4,
+    "Thu": 5,
+    "Fri": 6
 }
 
 BOOST_DURATION = {
-    0 : 0,
-    5 : 1,
+    0: 0,
+    5: 1,
     10: 2,
     15: 3,
     20: 4,

@@ -31,8 +31,10 @@ from maxcul._const import (
     ATTR_BATTERY_LOW,
 )
 from maxcul._exceptions import (
-    MoritzError, UnknownMessageError, LengthNotMatchingError, MissingPayloadParameterError
-)
+    MoritzError,
+    UnknownMessageError,
+    LengthNotMatchingError,
+    MissingPayloadParameterError)
 
 # environment imports
 

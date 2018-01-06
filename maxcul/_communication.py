@@ -142,7 +142,8 @@ class MaxConnection(threading.Thread):
 
     def _send_message(self, msg):
         if not self.com_thread.is_alive():
-            LOGGER.error("Communication with serial device is not established, unable to send a message")
+            LOGGER.error(
+                "Communication with serial device is not established, unable to send a message")
             return False
         LOGGER.debug("Sending message %s", msg)
         try:
@@ -162,7 +163,8 @@ class MaxConnection(threading.Thread):
 
     def _resend_message(self):
         now = int(time.monotonic())
-        for counter, (when, attempt, msg) in self._outstanding_acks.copy().items():
+        for counter, (when, attempt,
+                      msg) in self._outstanding_acks.copy().items():
             if when + BACKOFF_INTERVAL < now and attempt == MAX_ATTEMPTS:
                 del self._outstanding_acks[counter]
                 LOGGER.warn("Did not receive an ACK for message %s", msg)
